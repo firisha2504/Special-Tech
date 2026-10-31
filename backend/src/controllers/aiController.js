@@ -1,7 +1,7 @@
 import prisma from '../config/db.js';
 import { v4 as uuidv4 } from 'uuid';
 import { aiChatSchema } from '../validators/schemas.js';
-import { generateAIResponse, generateProjectSpecification } from '../services/ai/aiService.js';
+import { generateAIResponse, generateProjectSpecification, getAIConfig } from '../services/ai/aiService.js';
 import { MessageSender } from '@prisma/client';
 
 export const startConversation = async (req, res, next) => {
@@ -96,6 +96,11 @@ export const sendMessage = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Conversation session not found' });
     }
 
+    // Customer-to-customer data isolation: verify sessionToken if supplied
+    if (sessionToken && conversation.sessionToken !== sessionToken) {
+      return res.status(403).json({ success: false, message: 'Access denied: Conversation session token mismatch' });
+    }
+
     // 1. Save Customer's Message
     const userMessage = await prisma.message.create({
       data: {
@@ -108,14 +113,21 @@ export const sendMessage = async (req, res, next) => {
     conversation.messages.push(userMessage);
 
     // 2. Generate AI Response via Business Analyst Engine
-    const aiText = await generateAIResponse(conversation, message);
+    const aiResponse = await generateAIResponse(conversation, message);
+    const content = aiResponse.content || String(aiResponse);
+    const metadata = aiResponse.metadata || {
+      provider: 'built-in',
+      model: 'Special Tech Intelligent Business Analyst (Heuristic NLP)',
+      isFallback: false,
+    };
 
-    // 3. Save AI's Response
+    // 3. Save AI's Response with Metadata
     const aiMessage = await prisma.message.create({
       data: {
         conversationId: conversation.id,
         sender: MessageSender.ASSISTANT,
-        content: aiText,
+        content,
+        metadata,
       },
     });
 
@@ -132,6 +144,7 @@ export const sendMessage = async (req, res, next) => {
       success: true,
       userMessage,
       aiMessage,
+      metadata,
     });
   } catch (err) {
     next(err);
@@ -141,6 +154,8 @@ export const sendMessage = async (req, res, next) => {
 export const getConversation = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const sessionToken = req.headers['x-session-token'] || req.query.sessionToken;
+
     const conversation = await prisma.conversation.findUnique({
       where: { id },
       include: {
@@ -156,6 +171,11 @@ export const getConversation = async (req, res, next) => {
 
     if (!conversation) {
       return res.status(404).json({ success: false, message: 'Conversation not found' });
+    }
+
+    // Customer data isolation check: If a sessionToken is specified, it must match
+    if (sessionToken && conversation.sessionToken !== sessionToken) {
+      return res.status(403).json({ success: false, message: 'Access denied: Conversation session token mismatch' });
     }
 
     res.json({ success: true, data: conversation });
@@ -205,6 +225,25 @@ export const updateSpecification = async (req, res, next) => {
       success: true,
       message: 'Specification updated successfully',
       data: requirement,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getAIStatus = async (req, res, next) => {
+  try {
+    const config = await getAIConfig();
+    res.json({
+      success: true,
+      provider: config.provider,
+      model: config.model,
+      status: config.lastStatus || (config.provider === 'built-in' ? 'operational' : (config.hasExternalCredentials ? 'connected' : 'misconfigured')),
+      hasGeminiKey: config.hasGeminiKey,
+      hasOpenaiKey: config.hasOpenaiKey,
+      hasExternalCredentials: config.hasExternalCredentials,
+      lastConnectedAt: config.lastConnectedAt,
+      lastError: config.lastError,
     });
   } catch (err) {
     next(err);

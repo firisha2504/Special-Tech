@@ -193,7 +193,7 @@ export const AdminSidebar = ({
               {!isCollapsed && (
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                    {user?.name || 'Alexander Wright'}
+                    {user?.name || 'Administrator'}
                   </div>
                   <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono flex items-center gap-1">
                     <Shield className="w-2.5 h-2.5 text-brand-blue dark:text-brand-cyan" />

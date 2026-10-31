@@ -125,7 +125,7 @@ export const DemoRequestModal = ({ isOpen, onClose, product = null }) => {
                     required
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="e.g. Sarah Jenkins"
+                    placeholder="e.g. Alex Morgan"
                     className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-brand-blue dark:focus:border-cyan-400"
                   />
                 </div>

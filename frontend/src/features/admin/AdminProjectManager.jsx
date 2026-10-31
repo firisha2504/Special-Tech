@@ -519,7 +519,7 @@ export const AdminProjectManager = () => {
                       required
                       value={formData.title}
                       onChange={(e) => handleTitleChange(e.target.value)}
-                      placeholder="e.g. EduNexus - School ERP"
+                      placeholder="e.g. Cloud Logistics Portal"
                       className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-brand-blue"
                     />
                   </div>
@@ -533,7 +533,7 @@ export const AdminProjectManager = () => {
                       required
                       value={formData.slug}
                       onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
-                      placeholder="edunexus-school-erp"
+                      placeholder="cloud-logistics-portal"
                       className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-brand-blue"
                     />
                   </div>

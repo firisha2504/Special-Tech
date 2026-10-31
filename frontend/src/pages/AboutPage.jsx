@@ -183,29 +183,38 @@ export const AboutPage = () => {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {team.map((member) => (
-            <div key={member.id} className="p-6 rounded-2xl glass-panel border border-slate-200 dark:border-slate-800 space-y-4 text-center group hover:border-brand-blue/50 transition-all hover:shadow-soft">
-              <div className="w-24 h-24 mx-auto rounded-full overflow-hidden border-2 border-brand-blue/30 dark:border-brand-cyan/40 p-1 group-hover:scale-105 transition-transform">
-                <img src={member.avatar} alt={member.name} className="w-full h-full object-cover rounded-full" />
+        {team.length === 0 ? (
+          <div className="p-10 rounded-2xl glass-panel border border-slate-200 dark:border-slate-800 text-center space-y-2">
+            <h4 className="text-base font-bold text-slate-800 dark:text-slate-200">Engineering & Executive Directory</h4>
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+              Our engineering team directory is currently being updated. Please contact us directly for architecture and enterprise leadership inquiries.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {team.map((member) => (
+              <div key={member.id} className="p-6 rounded-2xl glass-panel border border-slate-200 dark:border-slate-800 space-y-4 text-center group hover:border-brand-blue/50 transition-all hover:shadow-soft">
+                <div className="w-24 h-24 mx-auto rounded-full overflow-hidden border-2 border-brand-blue/30 dark:border-brand-cyan/40 p-1 group-hover:scale-105 transition-transform">
+                  <img src={member.avatar} alt={member.name} className="w-full h-full object-cover rounded-full" />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-base font-bold text-slate-900 dark:text-white group-hover:text-brand-blue dark:group-hover:text-brand-cyan transition-colors">{member.name}</h4>
+                  <p className="text-xs text-brand-blue dark:text-brand-cyan font-medium">{member.role}</p>
+                </div>
+                <p className="text-slate-600 dark:text-slate-400 text-xs leading-relaxed line-clamp-3">
+                  {member.bio}
+                </p>
+                <div className="flex flex-wrap justify-center gap-1 pt-2">
+                  {member.skills?.slice(0, 3).map((skill) => (
+                    <span key={skill} className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-[10px] text-slate-700 dark:text-slate-300 font-mono">
+                      {skill}
+                    </span>
+                  ))}
+                </div>
               </div>
-              <div className="space-y-1">
-                <h4 className="text-base font-bold text-slate-900 dark:text-white group-hover:text-brand-blue dark:group-hover:text-brand-cyan transition-colors">{member.name}</h4>
-                <p className="text-xs text-brand-blue dark:text-brand-cyan font-medium">{member.role}</p>
-              </div>
-              <p className="text-slate-600 dark:text-slate-400 text-xs leading-relaxed line-clamp-3">
-                {member.bio}
-              </p>
-              <div className="flex flex-wrap justify-center gap-1 pt-2">
-                {member.skills?.slice(0, 3).map((skill) => (
-                  <span key={skill} className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-[10px] text-slate-700 dark:text-slate-300 font-mono">
-                    {skill}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );

@@ -39,6 +39,8 @@ import {
   Home,
   MessageSquare,
   Zap,
+  BookOpen,
+  Shield,
 } from 'lucide-react';
 import SystemTable from './SystemTable';
 import SystemChart from './SystemChart';
@@ -74,6 +76,8 @@ const iconComponents = {
   Home,
   MessageSquare,
   Zap,
+  BookOpen,
+  Shield,
 };
 
 export const PrototypeWorkspace = ({
@@ -212,6 +216,18 @@ export const PrototypeWorkspace = ({
             <span>Submit Project to Special Tech</span>
           </button>
         </div>
+      </div>
+
+      {/* Interactive Demonstration Prototype Banner */}
+      <div className="bg-blue-50/90 dark:bg-blue-950/40 border-b border-blue-200/60 dark:border-blue-900/40 px-4 py-2 flex items-center justify-between text-[11px] text-blue-900 dark:text-blue-200">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse flex-shrink-0" />
+          <span className="font-semibold">Interactive Concept Prototype:</span>
+          <span className="opacity-90 hidden sm:inline">This is a functional demonstration prototype to test workflows, layouts, and data models before production software development.</span>
+        </div>
+        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/60 font-bold">
+          Concept Mockup
+        </span>
       </div>
 
       {/* 2. MAIN WORKSPACE WITH RESPONSIVE CONTAINER */}

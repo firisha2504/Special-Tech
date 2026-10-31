@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Clock,
   ShieldCheck,
+  AlertCircle,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -27,10 +28,12 @@ export const ContactPage = () => {
   });
   const [submitting, setSubmitting] = useState(false);
   const [submittedInquiry, setSubmittedInquiry] = useState(null);
+  const [errorMessage, setErrorMessage] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
+    setErrorMessage(null);
     try {
       const res = await inquiryApi.submit({
         name: formData.name,
@@ -47,7 +50,8 @@ export const ContactPage = () => {
         setSubmittedInquiry(res.data);
       }
     } catch (err) {
-      alert('Failed to send message. Please ensure all required fields are filled.');
+      const msg = err.response?.data?.message || err.message || 'Failed to send message. Please ensure all required fields are filled.';
+      setErrorMessage(msg);
     } finally {
       setSubmitting(false);
     }
@@ -201,7 +205,7 @@ export const ContactPage = () => {
                     <input
                       type="text"
                       required
-                      placeholder="Jane Doe"
+                      placeholder="Your Full Name"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900/90 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-brand-blue dark:focus:border-brand-cyan shadow-sm"
@@ -302,6 +306,13 @@ export const ContactPage = () => {
                     className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900/90 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-brand-blue dark:focus:border-brand-cyan shadow-sm"
                   />
                 </div>
+
+                {errorMessage && (
+                  <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-medium animate-fadeIn flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <span>{errorMessage}</span>
+                  </div>
+                )}
 
                 <div className="pt-2">
                   <button

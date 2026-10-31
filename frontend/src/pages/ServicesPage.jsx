@@ -72,7 +72,7 @@ export const ServicesPage = () => {
       });
       setFormSubmitted(true);
     } catch (err) {
-      alert('Failed to submit inquiry. Please check required fields.');
+      alert(err.response?.data?.message || 'Failed to submit inquiry. Please check required fields.');
     } finally {
       setSubmitting(false);
     }
@@ -249,7 +249,7 @@ export const ServicesPage = () => {
                       required
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="e.g. John Doe"
+                      placeholder="e.g. Alex Johnson"
                       className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-brand-blue dark:focus:border-brand-cyan text-sm"
                     />
                   </div>
@@ -262,7 +262,7 @@ export const ServicesPage = () => {
                         required
                         value={formData.email}
                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        placeholder="john@company.com"
+                        placeholder="alex@company.com"
                         className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-brand-blue dark:focus:border-brand-cyan text-sm"
                       />
                     </div>

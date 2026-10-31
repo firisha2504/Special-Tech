@@ -8,6 +8,12 @@ import {
   getActivityLogs,
   getNotifications,
   markNotificationRead,
+  testAIProviderConnection,
+  getAdminConversations,
+  getAdminConversationById,
+  getEmailStatus,
+  testSMTPConnectionEndpoint,
+  sendTestEmailEndpoint,
 } from '../controllers/adminController.js';
 import {
   getAllProjects,
@@ -50,6 +56,16 @@ router.post('/settings', updateSetting);
 router.get('/activity-logs', getActivityLogs);
 router.get('/notifications', getNotifications);
 router.patch('/notifications/:id/read', markNotificationRead);
+
+// AI Engine Management & Discovery Auditing
+router.post('/ai/test', testAIProviderConnection);
+router.get('/conversations', getAdminConversations);
+router.get('/conversations/:id', getAdminConversationById);
+
+// Email & SMTP Notification Management
+router.get('/email/status', getEmailStatus);
+router.post('/email/test-connection', testSMTPConnectionEndpoint);
+router.post('/email/send-test', sendTestEmailEndpoint);
 
 // Generic Image Upload for Admin Forms
 router.post('/upload', upload.single('image'), uploadProjectImage);

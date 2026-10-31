@@ -19,11 +19,28 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5050;
 
+const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5174').replace(/\/$/, '');
+const allowedOrigins = new Set([
+  frontendUrl,
+  'http://localhost:5174',
+  'http://127.0.0.1:5174',
+]);
+
 // Middleware
 app.use(
   cors({
-    origin: '*',
+    origin: (origin, callback) => {
+      // Allow requests with no origin (curl, mobile apps, server-to-server)
+      if (!origin) return callback(null, true);
+      const normalizedOrigin = origin.replace(/\/$/, '');
+      if (allowedOrigins.has(normalizedOrigin)) {
+        return callback(null, true);
+      }
+      return callback(new Error(`CORS error: Origin ${origin} not allowed by Special Tech backend policy.`));
+    },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   })
 );
 app.use(express.json({ limit: '10mb' }));

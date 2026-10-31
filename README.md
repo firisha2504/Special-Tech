@@ -97,18 +97,18 @@ npm run dev
 # Running on http://localhost:5050
 ```
 
-### 3. Start Frontend Development Server (Port 5175 / 5174)
+### 3. Start Frontend Development Server (Port 5174)
 ```bash
 cd frontend
 npm run dev
-# Running on http://localhost:5175
+# Running on http://localhost:5174
 ```
 
 ---
 
 ## 🔑 Default Administrator Credentials
 
-- **URL**: `http://localhost:5175/admin`
+- **URL**: `http://localhost:5174/admin`
 - **Email**: `admin@specialtech.com`
 - **Password**: `Admin@123456`
 

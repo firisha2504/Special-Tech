@@ -1,4 +1,5 @@
 import prisma from '../../config/db.js';
+import { detectSystemType } from '../ai/aiService.js';
 
 /**
  * Controlled Structured Prototype Generator and Modifier
@@ -35,7 +36,7 @@ export const PROTOTYPE_BLUEPRINTS = {
         searchPlaceholder: 'Search by student name, roll number, or grade...',
         columns: ['Roll No', 'Full Name', 'Grade & Section', 'Guardian', 'Attendance', 'Fee Status', 'Status'],
         rows: [
-          { id: '1', roll: 'STU-101', name: 'Liam Alexander', grade: 'Grade 10-A', guardian: 'Robert Alexander', attendance: '98%', fee: 'Paid', status: 'Active' },
+          { id: '1', roll: 'STU-101', name: 'Liam Archer', grade: 'Grade 10-A', guardian: 'Robert Archer', attendance: '98%', fee: 'Paid', status: 'Active' },
           { id: '2', roll: 'STU-102', name: 'Sophia Martinez', grade: 'Grade 10-B', guardian: 'Maria Martinez', attendance: '95%', fee: 'Paid', status: 'Active' },
           { id: '3', roll: 'STU-103', name: 'Ethan James Foster', grade: 'Grade 11-A', guardian: 'Karen Foster', attendance: '91%', fee: 'Pending', status: 'Active' },
           { id: '4', roll: 'STU-104', name: 'Olivia Grace Davis', grade: 'Grade 9-C', guardian: 'Thomas Davis', attendance: '99%', fee: 'Paid', status: 'Active' },
@@ -48,7 +49,7 @@ export const PROTOTYPE_BLUEPRINTS = {
         columns: ['Teacher ID', 'Name', 'Department', 'Classes Assigned', 'Email', 'Status'],
         rows: [
           { id: 't1', idNum: 'TCH-001', name: 'Dr. Michael Hayes', department: 'Mathematics', classes: 'Grade 10-A, 11-B', email: 'm.hayes@school.edu', status: 'Active' },
-          { id: 't2', idNum: 'TCH-002', name: 'Sarah Jenkins, M.Sc.', department: 'Physics & Sciences', classes: 'Grade 11-A, 12-A', email: 's.jenkins@school.edu', status: 'Active' },
+          { id: 't2', idNum: 'TCH-002', name: 'Sarah Miller, M.Sc.', department: 'Physics & Sciences', classes: 'Grade 11-A, 12-A', email: 's.miller@school.edu', status: 'Active' },
           { id: 't3', idNum: 'TCH-003', name: 'David Kim', department: 'Computer Science', classes: 'Grade 9-C, 10-B', email: 'd.kim@school.edu', status: 'Active' },
           { id: 't4', idNum: 'TCH-004', name: 'Emily Watson', department: 'English Literature', classes: 'Grade 9-A, 10-A', email: 'e.watson@school.edu', status: 'On Leave' },
         ],
@@ -58,7 +59,7 @@ export const PROTOTYPE_BLUEPRINTS = {
         searchPlaceholder: 'Search by invoice number or student...',
         columns: ['Invoice #', 'Student Name', 'Term', 'Amount', 'Due Date', 'Status'],
         rows: [
-          { id: 'f1', invoice: 'INV-2026-081', student: 'Liam Alexander', term: 'Fall Term 2026', amount: '$1,200', due: '2026-11-15', status: 'Paid' },
+          { id: 'f1', invoice: 'INV-2026-081', student: 'Liam Archer', term: 'Fall Term 2026', amount: '$1,200', due: '2026-11-15', status: 'Paid' },
           { id: 'f2', invoice: 'INV-2026-082', student: 'Sophia Martinez', term: 'Fall Term 2026', amount: '$1,200', due: '2026-11-15', status: 'Paid' },
           { id: 'f3', invoice: 'INV-2026-083', student: 'Ethan James Foster', term: 'Fall Term 2026', amount: '$1,350', due: '2026-11-20', status: 'Pending' },
           { id: 'f4', invoice: 'INV-2026-084', student: 'Noah Benjamin Reed', term: 'Fall Term 2026', amount: '$1,400', due: '2026-10-25', status: 'Overdue' },
@@ -105,7 +106,7 @@ export const PROTOTYPE_BLUEPRINTS = {
 
   HOSPITAL_MANAGEMENT: {
     systemType: 'HOSPITAL_MANAGEMENT',
-    systemName: 'CarePulse Health Suite',
+    systemName: 'HealthPulse Clinical Suite',
     tagline: 'Modern Clinical ERP, EHR & Patient Scheduling',
     theme: {
       primaryColor: '#06B6D4',
@@ -206,10 +207,10 @@ export const PROTOTYPE_BLUEPRINTS = {
         searchPlaceholder: 'Search order number or customer name...',
         columns: ['Order ID', 'Customer', 'Items Count', 'Total', 'Payment', 'Fulfillment', 'Date'],
         rows: [
-          { id: 'ord1', orderId: '#ORD-8821', customer: 'Alexander Hayes', items: '3 items', total: '$149.00', payment: 'Paid (Stripe)', status: 'Processing', date: 'Just now' },
+          { id: 'ord1', orderId: '#ORD-8821', customer: 'Lucas Miller', items: '3 items', total: '$149.00', payment: 'Paid (Stripe)', status: 'Processing', date: 'Just now' },
           { id: 'ord2', orderId: '#ORD-8820', customer: 'Claire Montgomery', items: '1 item', total: '$89.00', payment: 'Paid (PayPal)', status: 'Shipped', date: '25 min ago' },
           { id: 'ord3', orderId: '#ORD-8819', customer: 'Derrick Chen', items: '5 items', total: '$310.50', payment: 'Paid (Apple Pay)', status: 'Delivered', date: '2 hours ago' },
-          { id: 'ord4', orderId: '#ORD-8818', customer: 'Samantha Price', items: '2 items', total: '$120.00', payment: 'Refunded', status: 'Cancelled', date: 'Yesterday' },
+          { id: 'ord4', orderId: '#ORD-8818', customer: 'Samantha Cole', items: '2 items', total: '$120.00', payment: 'Refunded', status: 'Cancelled', date: 'Yesterday' },
         ],
       },
       products: {
@@ -314,6 +315,256 @@ export const PROTOTYPE_BLUEPRINTS = {
     ],
   },
 
+  ELEARNING_PLATFORM: {
+    systemType: 'ELEARNING_PLATFORM',
+    systemName: 'EduStream Interactive Learning LMS',
+    tagline: 'On-Demand Course Streaming, Quizzes & Student Analytics',
+    theme: {
+      primaryColor: '#7C3AED',
+      accentColor: '#A78BFA',
+      gradient: 'from-purple-600 to-indigo-500',
+    },
+    modules: [
+      { id: 'dashboard', name: 'Dashboard', icon: 'LayoutDashboard' },
+      { id: 'courses', name: 'Course Catalog', icon: 'BookOpen' },
+      { id: 'students', name: 'Active Learners', icon: 'GraduationCap' },
+      { id: 'quizzes', name: 'Quizzes & Grades', icon: 'BarChart3' },
+      { id: 'certificates', name: 'Certificates', icon: 'Award' },
+      { id: 'revenue', name: 'Course Revenue', icon: 'CreditCard' },
+    ],
+    kpis: [
+      { label: 'Active Learners', value: '4,850', change: '+14% this month', trend: 'up', icon: 'GraduationCap', color: 'violet' },
+      { label: 'Published Courses', value: '64', change: '8 new courses', trend: 'up', icon: 'BookOpen', color: 'blue' },
+      { label: 'Avg Completion Rate', value: '78.2%', change: '+3.5% vs avg', trend: 'up', icon: 'TrendingUp', color: 'emerald' },
+      { label: 'Monthly Revenue', value: '$38,400', change: '+18% YoY', trend: 'up', icon: 'CreditCard', color: 'cyan' },
+    ],
+    tables: {
+      courses: {
+        title: 'Published Course Curriculum',
+        searchPlaceholder: 'Search courses by title, instructor, or subject...',
+        columns: ['Course Code', 'Course Title', 'Instructor', 'Lessons', 'Enrolled Students', 'Rating', 'Status'],
+        rows: [
+          { id: 'c1', code: 'CS-101', title: 'Full-Stack Modern React & Node.js', instructor: 'Prof. Alex Rivera', lessons: '42 Lessons', students: '1,240', rating: '4.9 ★', status: 'Published' },
+          { id: 'c2', code: 'AI-201', title: 'Applied Machine Learning & Neural Nets', instructor: 'Dr. Elena Rostova', lessons: '36 Lessons', students: '980', rating: '4.8 ★', status: 'Published' },
+          { id: 'c3', code: 'UX-105', title: 'Design Systems & Enterprise Figma', instructor: 'Marcus Chen', lessons: '24 Lessons', students: '860', rating: '4.9 ★', status: 'Published' },
+          { id: 'c4', code: 'DB-301', title: 'High-Performance PostgreSQL Indexing', instructor: 'Sarah Jenkins', lessons: '28 Lessons', students: '720', rating: '5.0 ★', status: 'Published' },
+        ],
+      },
+    },
+    forms: {
+      courses: {
+        title: 'Publish New Video Course',
+        fields: [
+          { label: 'Course Title', name: 'title', type: 'text', placeholder: 'e.g. Master Cloud Architecture' },
+          { label: 'Instructor Name', name: 'instructor', type: 'text', placeholder: 'Instructor full name' },
+          { label: 'Category', name: 'category', type: 'select', options: ['Software Engineering', 'Data Science', 'UI/UX Design', 'Cloud DevOps'] },
+          { label: 'Pricing ($)', name: 'price', type: 'number', placeholder: '99.00' },
+        ],
+      },
+    },
+    charts: [
+      {
+        id: 'enrollment-velocity',
+        title: 'Weekly Learner Enrollments',
+        type: 'line',
+        data: [
+          { label: 'W1', value: 120 },
+          { label: 'W2', value: 240 },
+          { label: 'W3', value: 380 },
+          { label: 'W4', value: 510 },
+        ],
+      },
+    ],
+  },
+
+  HOTEL_MANAGEMENT: {
+    systemType: 'HOTEL_MANAGEMENT',
+    systemName: 'GrandHorizon Hospitality Suite',
+    tagline: 'Front Desk Reservations, Room Calendar & Guest Folios',
+    theme: {
+      primaryColor: '#0D9488',
+      accentColor: '#2DD4BF',
+      gradient: 'from-teal-600 to-emerald-500',
+    },
+    modules: [
+      { id: 'dashboard', name: 'Front Desk Overview', icon: 'LayoutDashboard' },
+      { id: 'rooms', name: 'Room Inventory', icon: 'BedDouble' },
+      { id: 'bookings', name: 'Reservations Calendar', icon: 'Calendar' },
+      { id: 'guests', name: 'Guest Directory', icon: 'Users' },
+      { id: 'housekeeping', name: 'Housekeeping', icon: 'Sparkles' },
+      { id: 'billing', name: 'Folios & Invoices', icon: 'CreditCard' },
+    ],
+    kpis: [
+      { label: 'Room Occupancy', value: '88.5%', change: '+6.2% vs last week', trend: 'up', icon: 'BedDouble', color: 'teal' },
+      { label: 'Active Guests', value: '142', change: '28 checking in today', trend: 'neutral', icon: 'Users', color: 'blue' },
+      { label: 'Clean Rooms Ready', value: '62 / 70', change: '8 being cleaned', trend: 'up', icon: 'Sparkles', color: 'emerald' },
+      { label: 'RevPAR (Daily)', value: '$195.40', change: '+12% this month', trend: 'up', icon: 'CreditCard', color: 'cyan' },
+    ],
+    tables: {
+      rooms: {
+        title: 'Live Room Availability Status',
+        searchPlaceholder: 'Search room number, type, or guest name...',
+        columns: ['Room #', 'Room Category', 'Floor', 'Status', 'Current Guest', 'Rate/Night', 'Cleaning Status'],
+        rows: [
+          { id: 'r1', room: 'Suite 401', category: 'Executive Penthouse', floor: '4th Floor', status: 'Occupied', guest: 'Lord Sterling', rate: '$450', clean: 'Inspected' },
+          { id: 'r2', room: 'Deluxe 302', category: 'Deluxe Ocean View', floor: '3rd Floor', status: 'Reserved', guest: 'Clara Oswald', rate: '$280', clean: 'Clean' },
+          { id: 'r3', room: 'Deluxe 303', category: 'Deluxe Ocean View', floor: '3rd Floor', status: 'Available', guest: '—', rate: '$280', clean: 'Clean' },
+          { id: 'r4', room: 'Standard 201', category: 'Standard King', floor: '2nd Floor', status: 'Occupied', guest: 'James Harrison', rate: '$160', clean: 'In Progress' },
+        ],
+      },
+    },
+    forms: {
+      rooms: {
+        title: 'Book Room Reservation',
+        fields: [
+          { label: 'Guest Full Name', name: 'guestName', type: 'text', placeholder: 'e.g. Eleanor Vance' },
+          { label: 'Room Type', name: 'roomType', type: 'select', options: ['Standard King', 'Deluxe Ocean View', 'Executive Suite', 'Presidential Penthouse'] },
+          { label: 'Check-In Date', name: 'checkIn', type: 'date' },
+          { label: 'Check-Out Date', name: 'checkOut', type: 'date' },
+        ],
+      },
+    },
+    charts: [
+      {
+        id: 'occupancy-trend',
+        title: '7-Day Occupancy Forecast (%)',
+        type: 'bar',
+        data: [
+          { label: 'Mon', value: 82 },
+          { label: 'Tue', value: 85 },
+          { label: 'Wed', value: 88 },
+          { label: 'Thu', value: 94 },
+          { label: 'Fri', value: 98 },
+          { label: 'Sat', value: 100 },
+          { label: 'Sun', value: 89 },
+        ],
+      },
+    ],
+  },
+
+  EMPLOYEE_MANAGEMENT: {
+    systemType: 'EMPLOYEE_MANAGEMENT',
+    systemName: 'PulseHR Workforce & Payroll Platform',
+    tagline: 'Staff Records, Monthly Salary Batches & Leave Management',
+    theme: {
+      primaryColor: '#2563EB',
+      accentColor: '#38BDF8',
+      gradient: 'from-blue-700 to-sky-500',
+    },
+    modules: [
+      { id: 'dashboard', name: 'HR Overview', icon: 'LayoutDashboard' },
+      { id: 'employees', name: 'Staff Directory', icon: 'Users' },
+      { id: 'payroll', name: 'Payroll & Salaries', icon: 'CreditCard' },
+      { id: 'leaves', name: 'Leave Requests', icon: 'CalendarCheck' },
+      { id: 'performance', name: 'Performance KPIs', icon: 'BarChart3' },
+    ],
+    kpis: [
+      { label: 'Total Headcount', value: '248', change: '+6 new hires', trend: 'up', icon: 'Users', color: 'blue' },
+      { label: 'Today\'s Clock-ins', value: '97.4%', change: '3 on approved leave', trend: 'up', icon: 'CalendarCheck', color: 'emerald' },
+      { label: 'Pending Leaves', value: '6', change: 'Needs manager review', trend: 'neutral', icon: 'Calendar', color: 'cyan' },
+      { label: 'Monthly Payroll Run', value: '$184,200', change: 'Processed 100%', trend: 'up', icon: 'CreditCard', color: 'violet' },
+    ],
+    tables: {
+      employees: {
+        title: 'Employee Staff Directory',
+        searchPlaceholder: 'Search staff by name, department, or title...',
+        columns: ['Emp ID', 'Full Name', 'Department', 'Job Title', 'Work Email', 'Start Date', 'Status'],
+        rows: [
+          { id: 'e1', empId: 'EMP-014', name: 'Jonathan Vance', dept: 'Engineering', title: 'Senior Cloud Architect', email: 'j.vance@company.com', start: '2022-03-15', status: 'Active' },
+          { id: 'e2', empId: 'EMP-015', name: 'Amara Nwosu', dept: 'Product Design', title: 'Lead Product Designer', email: 'a.nwosu@company.com', start: '2023-01-10', status: 'Active' },
+          { id: 'e3', empId: 'EMP-016', name: 'Lucas Meyer', dept: 'Finance & Legal', title: 'Financial Controller', email: 'l.meyer@company.com', start: '2021-08-01', status: 'Active' },
+          { id: 'e4', empId: 'EMP-017', name: 'Rachel Gomez', dept: 'People Ops', title: 'Talent Acquisition Lead', email: 'r.gomez@company.com', start: '2024-02-01', status: 'Active' },
+        ],
+      },
+    },
+    forms: {
+      employees: {
+        title: 'Onboard New Employee Profile',
+        fields: [
+          { label: 'Full Legal Name', name: 'fullName', type: 'text', placeholder: 'e.g. David Thorne' },
+          { label: 'Department', name: 'department', type: 'select', options: ['Engineering', 'Product & Design', 'Sales & Marketing', 'Finance & HR'] },
+          { label: 'Position / Role', name: 'role', type: 'text', placeholder: 'e.g. Software Engineer' },
+          { label: 'Annual Salary ($)', name: 'salary', type: 'number', placeholder: '85000' },
+        ],
+      },
+    },
+    charts: [
+      {
+        id: 'dept-headcount',
+        title: 'Department Headcount Breakdown',
+        type: 'donut',
+        data: [
+          { label: 'Engineering', value: 112, color: '#2563EB' },
+          { label: 'Product & Design', value: 38, color: '#38BDF8' },
+          { label: 'Sales & Marketing', value: 64, color: '#10B981' },
+          { label: 'Finance & HR', value: 34, color: '#F59E0B' },
+        ],
+      },
+    ],
+  },
+
+  FOOTBALL_TOURNAMENT: {
+    systemType: 'FOOTBALL_TOURNAMENT',
+    systemName: 'KickOff Championship Tournament Suite',
+    tagline: 'Match Fixtures, Live Scores, Standings & Golden Boot',
+    theme: {
+      primaryColor: '#059669',
+      accentColor: '#34D399',
+      gradient: 'from-emerald-600 to-teal-500',
+    },
+    modules: [
+      { id: 'dashboard', name: 'Championship Hub', icon: 'LayoutDashboard' },
+      { id: 'teams', name: 'Teams & Squads', icon: 'Shield' },
+      { id: 'fixtures', name: 'Fixtures & Matches', icon: 'Calendar' },
+      { id: 'standings', name: 'League Standings', icon: 'BarChart3' },
+      { id: 'scorers', name: 'Top Scorers', icon: 'Award' },
+      { id: 'venues', name: 'Pitches & Venues', icon: 'Building2' },
+    ],
+    kpis: [
+      { label: 'Registered Teams', value: '24', change: '4 groups of 6', trend: 'up', icon: 'Shield', color: 'emerald' },
+      { label: 'Scheduled Matches', value: '68', change: '42 completed', trend: 'neutral', icon: 'Calendar', color: 'blue' },
+      { label: 'Goals Scored', value: '142', change: '3.38 goals / match', trend: 'up', icon: 'Award', color: 'teal' },
+      { label: 'Yellow / Red Cards', value: '38 / 3', change: 'Fair play index: 92%', trend: 'up', icon: 'AlertCircle', color: 'cyan' },
+    ],
+    tables: {
+      teams: {
+        title: 'Championship Registered Clubs',
+        searchPlaceholder: 'Search club name, group, or manager...',
+        columns: ['Club Code', 'Team Name', 'Group', 'Manager / Coach', 'Squad Size', 'Points', 'Status'],
+        rows: [
+          { id: 't1', code: 'FC-01', name: 'Apex United FC', group: 'Group A', manager: 'Coach Marcus Bell', size: '22 Players', pts: '12 PTS', status: 'Qualified' },
+          { id: 't2', code: 'FC-02', name: 'Metro Stars SC', group: 'Group A', manager: 'Coach Diego Santos', size: '21 Players', pts: '9 PTS', status: 'Qualified' },
+          { id: 't3', code: 'FC-03', name: 'Highland Rangers', group: 'Group B', manager: 'Coach Liam Stewart', size: '23 Players', pts: '10 PTS', status: 'Qualified' },
+          { id: 't4', code: 'FC-04', name: 'Coastal Athletic', group: 'Group B', manager: 'Coach Nathan Cole', size: '20 Players', pts: '7 PTS', status: 'In Contention' },
+        ],
+      },
+    },
+    forms: {
+      teams: {
+        title: 'Register New Tournament Team',
+        fields: [
+          { label: 'Club / Team Name', name: 'teamName', type: 'text', placeholder: 'e.g. Phoenix FC' },
+          { label: 'Tournament Group', name: 'group', type: 'select', options: ['Group A', 'Group B', 'Group C', 'Group D'] },
+          { label: 'Head Coach Full Name', name: 'coach', type: 'text', placeholder: 'Manager Name' },
+          { label: 'Primary Kit Color', name: 'kitColor', type: 'text', placeholder: 'e.g. Royal Blue / White' },
+        ],
+      },
+    },
+    charts: [
+      {
+        id: 'goals-by-matchday',
+        title: 'Goals Scored per Matchday',
+        type: 'bar',
+        data: [
+          { label: 'MD 1', value: 28 },
+          { label: 'MD 2', value: 34 },
+          { label: 'MD 3', value: 39 },
+          { label: 'MD 4', value: 41 },
+        ],
+      },
+    ],
+  },
+
   CUSTOM_BUSINESS_SYSTEM: {
     systemType: 'CUSTOM_BUSINESS_SYSTEM',
     systemName: 'NexusEnterprise Solutions',
@@ -342,10 +593,10 @@ export const PROTOTYPE_BLUEPRINTS = {
         searchPlaceholder: 'Search corporate accounts, contacts, or industry...',
         columns: ['Client Code', 'Company Name', 'Industry', 'Account Executive', 'Active SOWs', 'Contract Value', 'Status'],
         rows: [
-          { id: 'cl1', code: 'ACC-01', name: 'Vanguard Global Logistics', industry: 'Supply Chain', exec: 'Marcus Vance', sows: '2 Active', value: '$180,000', status: 'Active' },
-          { id: 'cl2', code: 'ACC-02', name: 'Helios Clean Energy', industry: 'Renewable Power', exec: 'Elena Rostova', sows: '1 Active', value: '$95,000', status: 'Active' },
-          { id: 'cl3', code: 'ACC-03', name: 'Apex FinTech Capital', industry: 'Financial Services', exec: 'Sophia Chen', sows: '3 Active', value: '$240,000', status: 'Active' },
-          { id: 'cl4', code: 'ACC-04', name: 'BioGenesis Pharmaceuticals', industry: 'Life Sciences', exec: 'Julian Mercer', sows: 'Proposal', value: '$120,000', status: 'Under Review' },
+          { id: 'cl1', code: 'ACC-01', name: 'Vanguard Global Logistics', industry: 'Supply Chain', exec: 'Enterprise Lead 1', sows: '2 Active', value: '$180,000', status: 'Active' },
+          { id: 'cl2', code: 'ACC-02', name: 'Helios Clean Energy', industry: 'Renewable Power', exec: 'Enterprise Lead 2', sows: '1 Active', value: '$95,000', status: 'Active' },
+          { id: 'cl3', code: 'ACC-03', name: 'Apex FinTech Capital', industry: 'Financial Services', exec: 'Enterprise Lead 3', sows: '3 Active', value: '$240,000', status: 'Active' },
+          { id: 'cl4', code: 'ACC-04', name: 'BioGenesis Pharmaceuticals', industry: 'Life Sciences', exec: 'Enterprise Lead 4', sows: 'Proposal', value: '$120,000', status: 'Under Review' },
         ],
       },
     },
@@ -388,13 +639,7 @@ export const generatePrototype = async (conversationId, systemType) => {
       include: { messages: true },
     });
     const allText = conversation?.messages.map((m) => m.content).join(' ') || '';
-    const lower = allText.toLowerCase();
-
-    if (lower.includes('school') || lower.includes('student') || lower.includes('teacher')) detectedType = 'SCHOOL_MANAGEMENT';
-    else if (lower.includes('hospital') || lower.includes('clinic') || lower.includes('patient')) detectedType = 'HOSPITAL_MANAGEMENT';
-    else if (lower.includes('shop') || lower.includes('store') || lower.includes('ecommerce')) detectedType = 'ECOMMERCE_SYSTEM';
-    else if (lower.includes('inventory') || lower.includes('warehouse') || lower.includes('stock')) detectedType = 'INVENTORY_MANAGEMENT';
-    else detectedType = 'CUSTOM_BUSINESS_SYSTEM';
+    detectedType = detectSystemType(allText).type;
   }
 
   const blueprint = PROTOTYPE_BLUEPRINTS[detectedType] || PROTOTYPE_BLUEPRINTS.CUSTOM_BUSINESS_SYSTEM;
@@ -468,7 +713,14 @@ export const modifyPrototypeWithAI = async (prototypeId, prompt) => {
   let changeDescription = '';
 
   // 1. Theme Color Modifications
-  if (lowerPrompt.includes('color') || lowerPrompt.includes('theme') || lowerPrompt.includes('violet') || lowerPrompt.includes('purple')) {
+  const hexMatch = prompt.match(/#([0-9a-fA-F]{6})/);
+  if (hexMatch) {
+    updatedConfig.theme = {
+      ...updatedConfig.theme,
+      primaryColor: hexMatch[0],
+    };
+    changeDescription += `Updated color palette to ${hexMatch[0]}. `;
+  } else if (lowerPrompt.includes('color') || lowerPrompt.includes('theme') || lowerPrompt.includes('violet') || lowerPrompt.includes('purple')) {
     if (lowerPrompt.includes('violet') || lowerPrompt.includes('purple')) {
       updatedConfig.theme = {
         primaryColor: '#8B5CF6',

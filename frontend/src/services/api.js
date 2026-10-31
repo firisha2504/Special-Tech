@@ -1,7 +1,9 @@
 import axios from 'axios';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5050/api';
+
 const api = axios.create({
-  baseURL: 'http://localhost:5050/api',
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -61,6 +63,7 @@ export const serviceApi = {
 };
 
 export const aiApi = {
+  getStatus: () => api.get('/ai/status'),
   startConversation: (data) => api.post('/ai/conversations', data),
   sendMessage: (data) => api.post('/ai/messages', data),
   getConversation: (id) => api.get(`/ai/conversations/${id}`),
@@ -80,7 +83,7 @@ export const inquiryApi = {
   getAll: (params) => api.get('/inquiries', { params }),
   getById: (id) => api.get(`/inquiries/${id}`),
   updateStatus: (id, data) => api.patch(`/inquiries/${id}/status`, data),
-  getPdfUrl: (id) => `http://localhost:5050/api/inquiries/${id}/pdf`,
+  getPdfUrl: (id) => `${API_BASE_URL}/inquiries/${id}/pdf`,
 };
 
 export const adminApi = {
@@ -92,6 +95,12 @@ export const adminApi = {
   getActivityLogs: () => api.get('/admin/activity-logs'),
   getNotifications: () => api.get('/admin/notifications'),
   markNotificationRead: (id) => api.patch(`/admin/notifications/${id}/read`),
+  testAIConnection: () => api.post('/admin/ai/test'),
+  getConversations: () => api.get('/admin/conversations'),
+  getConversationById: (id) => api.get(`/admin/conversations/${id}`),
+  getEmailStatus: () => api.get('/admin/email/status'),
+  testSMTPConnection: () => api.post('/admin/email/test-connection'),
+  sendTestEmail: (data) => api.post('/admin/email/send-test', data),
 };
 
 export default api;

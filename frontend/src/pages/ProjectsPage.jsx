@@ -113,8 +113,10 @@ export const ProjectsPage = () => {
         ) : projects.length === 0 ? (
           <div className="text-center py-20 space-y-4">
             <Layers className="w-12 h-12 mx-auto text-slate-400 dark:text-slate-600" />
-            <h3 className="text-xl font-bold text-slate-900 dark:text-white">No projects found</h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Try adjusting your category filter or search keywords.</p>
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white">No projects published yet. Our portfolio is growing.</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+              Our engineering team is actively building tailored software and enterprise platforms. Check back soon for newly published client deployments.
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">

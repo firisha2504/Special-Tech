@@ -6,7 +6,8 @@ import {
   updateInquiryStatus,
   downloadSpecificationPDF,
 } from '../controllers/inquiryController.js';
-import { authenticateToken } from '../middleware/auth.js';
+import { authenticateToken, requireRole } from '../middleware/auth.js';
+import { Role } from '@prisma/client';
 
 const router = Router();
 
@@ -16,9 +17,9 @@ router.post('/submit', submitInquiry);
 // Public or Customer PDF download
 router.get('/:id/pdf', downloadSpecificationPDF);
 
-// Admin Inquiries CRM
-router.get('/', authenticateToken, getInquiries);
-router.get('/:id', authenticateToken, getInquiryById);
-router.patch('/:id/status', authenticateToken, updateInquiryStatus);
+// Admin Inquiries CRM (Strictly Admin Role Required)
+router.get('/', authenticateToken, requireRole([Role.ADMIN]), getInquiries);
+router.get('/:id', authenticateToken, requireRole([Role.ADMIN]), getInquiryById);
+router.patch('/:id/status', authenticateToken, requireRole([Role.ADMIN]), updateInquiryStatus);
 
 export default router;

@@ -5,7 +5,29 @@ import { sendInquiryNotifications } from '../services/email/emailService.js';
 
 export const submitInquiry = async (req, res, next) => {
   try {
-    const data = customerInquirySchema.parse(req.body);
+    // Normalize payload to handle valid field aliases (e.g. fullName -> name, subject -> title)
+    const payload = {
+      ...req.body,
+      name: req.body.name || req.body.fullName,
+      title: req.body.title || req.body.subject || req.body.projectName,
+    };
+
+    const parsed = customerInquirySchema.safeParse(payload);
+    if (!parsed.success) {
+      const fieldErrors = parsed.error.issues.map((issue) => ({
+        field: issue.path.join('.'),
+        message: issue.message,
+      }));
+      const formattedMessage = fieldErrors.map((e) => `${e.field}: ${e.message}`).join(', ');
+
+      return res.status(400).json({
+        success: false,
+        message: `Validation Error: ${formattedMessage}`,
+        errors: fieldErrors,
+      });
+    }
+
+    const data = parsed.data;
 
     // 1. Find or create Customer
     let customer = await prisma.customer.findUnique({ where: { email: data.email } });
@@ -31,7 +53,11 @@ export const submitInquiry = async (req, res, next) => {
 
     // 2. Generate unique Inquiry Number
     const count = await prisma.inquiry.count();
-    const inquiryNumber = `ST-INQ-2026-${String(count + 1).padStart(4, '0')}`;
+    let inquiryNumber = `ST-INQ-2026-${String(count + 1).padStart(4, '0')}`;
+    const existingRef = await prisma.inquiry.findUnique({ where: { inquiryNumber } });
+    if (existingRef) {
+      inquiryNumber = `ST-INQ-2026-${String(count + 1).padStart(4, '0')}-${Date.now().toString().slice(-4)}`;
+    }
 
     // 3. Create Inquiry
     const inquiry = await prisma.inquiry.create({
@@ -123,7 +149,15 @@ export const getInquiryById = async (req, res, next) => {
         assignedTo: true,
         service: true,
         project: true,
-        requirement: true,
+        requirement: {
+          include: {
+            conversation: {
+              include: {
+                messages: { orderBy: { createdAt: 'asc' } },
+              },
+            },
+          },
+        },
         prototypeVersion: { include: { prototype: true } },
       },
     });

@@ -194,8 +194,8 @@ export const AdminHeader = ({
           <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-brand-blue to-cyan-400 text-white font-bold text-xs flex items-center justify-center">
             {user?.name ? user.name.charAt(0).toUpperCase() : 'A'}
           </div>
-          <span className="text-xs font-bold text-slate-800 dark:text-slate-200 max-w-[120px] truncate">
-            {user?.name || 'Alexander Wright'}
+          <span className="text-xs font-bold text-slate-800 dark:text-slate-200 max-w-[140px] truncate">
+            {user?.name || 'Administrator'}
           </span>
         </div>
       </div>

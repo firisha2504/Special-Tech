@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import PDFDocument from 'pdfkit';
 
 /**
  * Generate a professional Special Tech Project Specification PDF document stream

@@ -47,6 +47,7 @@ export const AIAssistantPage = () => {
   const [prototypeData, setPrototypeData] = useState(null);
   const [generatingSpec, setGeneratingSpec] = useState(false);
   const [generatingPrototype, setGeneratingPrototype] = useState(false);
+  const [aiProviderInfo, setAiProviderInfo] = useState({ provider: 'built-in', model: 'Special Tech Software Analyst' });
 
   // Customer Submission Modal State
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
@@ -74,6 +75,10 @@ export const AIAssistantPage = () => {
 
   const initConversation = async () => {
     try {
+      aiApi.getStatus().then((res) => {
+        if (res.data?.success) setAiProviderInfo(res.data);
+      }).catch(() => {});
+
       const res = await aiApi.startConversation({ sessionToken });
       if (res.data.success) {
         setConversation(res.data.conversation);
@@ -118,6 +123,9 @@ export const AIAssistantPage = () => {
       });
 
       if (res.data.success) {
+        if (res.data.metadata) {
+          setAiProviderInfo(res.data.metadata);
+        }
         setMessages((prev) => [
           ...prev.filter((m) => m.id !== tempUserMsg.id),
           res.data.userMessage,
@@ -237,7 +245,7 @@ export const AIAssistantPage = () => {
         });
       }
     } catch (err) {
-      alert('Failed to submit project. Please verify your details.');
+      alert(err.response?.data?.message || 'Failed to submit project. Please verify your details.');
     } finally {
       setSubmittingInquiry(false);
     }
@@ -263,9 +271,17 @@ export const AIAssistantPage = () => {
             className="w-10 h-10 rounded-xl object-contain shadow-glow-cyan border border-brand-cardBorder flex-shrink-0"
           />
           <div>
-            <h1 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <h1 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
               <span>Special AI — Software Analyst</span>
               <span className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse" />
+              <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                Engine: {aiProviderInfo?.provider === 'built-in' ? 'Special Tech Built-In Analyst (Heuristic NLP)' : aiProviderInfo?.provider === 'gemini' ? 'Google Gemini AI' : 'OpenAI GPT'}
+              </span>
+              {aiProviderInfo?.isFallback && (
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                  Fallback Mode Active
+                </span>
+              )}
             </h1>
             <p className="text-xs text-slate-600 dark:text-slate-400">Describe your idea. Our AI plans your requirements and builds an interactive prototype.</p>
           </div>
@@ -698,8 +714,21 @@ export const AIAssistantPage = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Lead Architect:</span>
-                    <span className="text-slate-900 dark:text-white font-semibold">Alexander Wright</span>
+                    <span className="text-slate-900 dark:text-white font-semibold">Special Tech Engineering Team</span>
                   </div>
+                </div>
+
+                {/* What Happens Next Guide */}
+                <div className="p-3.5 rounded-xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-900/40 text-left text-xs space-y-1.5 text-slate-700 dark:text-slate-300">
+                  <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 text-xs">
+                    <span className="w-1.5 h-1.5 rounded-full bg-brand-blue dark:bg-cyan-400" />
+                    <span>What happens next?</span>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1 text-[11px] text-slate-600 dark:text-slate-400">
+                    <li>Our Senior Solutions Architect inspects your requirements blueprint and prototype.</li>
+                    <li>We will reach out to you within 24 hours via your preferred contact method.</li>
+                    <li>You will receive a formal architectural proposal, technical quote, and delivery timeline.</li>
+                  </ol>
                 </div>
 
                 <div className="pt-2 flex flex-col sm:flex-row items-center gap-3 justify-center">
@@ -734,7 +763,7 @@ export const AIAssistantPage = () => {
                     <input
                       type="text"
                       required
-                      placeholder="e.g. Dr. Arthur Pendelton"
+                      placeholder="e.g. Alex Johnson"
                       value={customerForm.name}
                       onChange={(e) => setCustomerForm({ ...customerForm, name: e.target.value })}
                       className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-brand-blue dark:focus:border-cyan-400 shadow-sm"
@@ -747,7 +776,7 @@ export const AIAssistantPage = () => {
                       <input
                         type="email"
                         required
-                        placeholder="arthur@horizon.edu"
+                        placeholder="e.g. alex@company.com"
                         value={customerForm.email}
                         onChange={(e) => setCustomerForm({ ...customerForm, email: e.target.value })}
                         className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-brand-blue dark:focus:border-cyan-400 shadow-sm"
