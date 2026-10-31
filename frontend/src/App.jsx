@@ -26,8 +26,10 @@ export const App = () => {
         <Route path="/products/:slug" element={<ProductDetailPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/ai-assistant" element={<AIAssistantPage />} />
-        <Route path="/admin" element={<AdminDashboardPage />} />
       </Route>
+
+      {/* Dedicated Admin Portal Route */}
+      <Route path="/admin" element={<AdminDashboardPage />} />
 
       {/* Catch-all fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />
