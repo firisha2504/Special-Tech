@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { adminApi, inquiryApi, projectApi } from '../services/api';
 import {
@@ -26,11 +27,23 @@ import {
   Eye,
   X,
   Filter,
+  RefreshCw,
 } from 'lucide-react';
 import Logo from '../components/common/Logo';
 
+const ADMIN_TABS = [
+  { id: 'overview', name: 'Overview', icon: LayoutDashboard },
+  { id: 'inquiries', name: 'Inquiries & Proposals', icon: Inbox, countKey: 'newInquiries' },
+  { id: 'projects', name: 'Portfolio Projects', icon: Briefcase },
+  { id: 'customers', name: 'Customer Directory', icon: Users },
+  { id: 'ai', name: 'AI & Templates', icon: Cpu },
+  { id: 'settings', name: 'Settings', icon: Settings },
+  { id: 'logs', name: 'Audit Logs', icon: History },
+];
+
 export const AdminDashboardPage = () => {
   const { user, login, logout, isAuthenticated } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Login form state
   const [loginEmail, setLoginEmail] = useState('admin@specialtech.com');
@@ -38,8 +51,63 @@ export const AdminDashboardPage = () => {
   const [loginError, setLoginError] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
 
-  // Active admin tab
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'inquiries' | 'projects' | 'customers' | 'ai' | 'settings' | 'logs'
+  // Active admin tab with URL search parameter persistence
+  const validTabIds = ['overview', 'inquiries', 'projects', 'customers', 'ai', 'settings', 'logs'];
+  const urlTab = searchParams.get('tab');
+  const initialTab = validTabIds.includes(urlTab) ? urlTab : 'overview';
+  const [activeTab, setActiveTabState] = useState(initialTab);
+  const tabButtonRefs = useRef({});
+
+  const setActiveTab = (tabId) => {
+    setActiveTabState(tabId);
+    setSearchParams({ tab: tabId }, { replace: true });
+  };
+
+  // Sync activeTab if URL changes
+  useEffect(() => {
+    const tabFromUrl = searchParams.get('tab');
+    if (tabFromUrl && validTabIds.includes(tabFromUrl) && tabFromUrl !== activeTab) {
+      setActiveTabState(tabFromUrl);
+    }
+  }, [searchParams]);
+
+  // Smooth scroll active tab into view in the navigation bar
+  useEffect(() => {
+    if (tabButtonRefs.current[activeTab]) {
+      tabButtonRefs.current[activeTab].scrollIntoView({
+        behavior: 'smooth',
+        inline: 'nearest',
+        block: 'nearest',
+      });
+    }
+  }, [activeTab]);
+
+  // Accessible keyboard navigation across tabs
+  const handleTabKeyDown = (e, index) => {
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      const nextIndex = (index + 1) % ADMIN_TABS.length;
+      const nextTab = ADMIN_TABS[nextIndex];
+      setActiveTab(nextTab.id);
+      tabButtonRefs.current[nextTab.id]?.focus();
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      const prevIndex = (index - 1 + ADMIN_TABS.length) % ADMIN_TABS.length;
+      const prevTab = ADMIN_TABS[prevIndex];
+      setActiveTab(prevTab.id);
+      tabButtonRefs.current[prevTab.id]?.focus();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      const firstTab = ADMIN_TABS[0];
+      setActiveTab(firstTab.id);
+      tabButtonRefs.current[firstTab.id]?.focus();
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      const lastTab = ADMIN_TABS[ADMIN_TABS.length - 1];
+      setActiveTab(lastTab.id);
+      tabButtonRefs.current[lastTab.id]?.focus();
+    }
+  };
 
   // Data states
   const [stats, setStats] = useState(null);
@@ -208,26 +276,41 @@ export const AdminDashboardPage = () => {
 
   // AUTHENTICATED ADMIN DASHBOARD
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* Top Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200 dark:border-slate-800">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3.5">
           <Logo variant="icon" size="md" showLink={false} />
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-slate-900 dark:text-white">Special Tech Control Center</h1>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                PostgreSQL Live
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
+                Special Tech Control Center
+              </h1>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live Sync
               </span>
             </div>
-            <p className="text-xs text-slate-500 dark:text-brand-muted">Logged in as {user?.name} ({user?.email})</p>
+            <p className="text-xs text-slate-500 dark:text-brand-muted mt-0.5">
+              Logged in as <span className="font-medium text-slate-700 dark:text-slate-300">{user?.name}</span> ({user?.email})
+            </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={loadDashboardData}
+            disabled={loading}
+            title="Refresh Dashboard Data"
+            className="p-2 sm:px-3 sm:py-2 rounded-xl bg-white hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-brand-blue' : ''}`} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+
           <button
             onClick={logout}
-            className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+            className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs"
           >
             <LogOut className="w-3.5 h-3.5" />
             <span>Sign Out</span>
@@ -235,39 +318,91 @@ export const AdminDashboardPage = () => {
         </div>
       </div>
 
-      {/* Admin Nav Tabs */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3 text-xs">
-        {[
-          { id: 'overview', name: 'Overview', icon: LayoutDashboard },
-          { id: 'inquiries', name: 'Inquiries & Proposals', icon: Inbox },
-          { id: 'projects', name: 'Portfolio Projects', icon: Briefcase },
-          { id: 'customers', name: 'Customer Directory', icon: Users },
-          { id: 'ai', name: 'AI & Templates', icon: Cpu },
-          { id: 'settings', name: 'Settings', icon: Settings },
-          { id: 'logs', name: 'Audit Logs', icon: History },
-        ].map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-3.5 py-2 rounded-xl font-semibold flex items-center gap-2 transition-all ${
-                isActive
-                  ? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-glow-blue'
-                  : 'bg-slate-100 dark:bg-slate-900/60 text-slate-700 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 border border-slate-200 dark:border-transparent'
-              }`}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              <span>{tab.name}</span>
-            </button>
-          );
-        })}
+      {/* Modern SaaS Navigation Component */}
+      <div className="space-y-3">
+        <div className="bg-white/80 dark:bg-slate-900/80 p-1.5 rounded-2xl border border-slate-200/90 dark:border-slate-800/80 backdrop-blur-xl shadow-xs transition-colors">
+          <nav
+            role="tablist"
+            aria-label="Admin Dashboard Navigation Tabs"
+            className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar scroll-smooth"
+          >
+            {ADMIN_TABS.map((tab, idx) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              const hasBadge = tab.countKey === 'newInquiries' && stats?.kpis?.newInquiries > 0;
+              const badgeCount = stats?.kpis?.newInquiries;
+
+              return (
+                <button
+                  key={tab.id}
+                  ref={(el) => (tabButtonRefs.current[tab.id] = el)}
+                  role="tab"
+                  aria-selected={isActive}
+                  id={`admin-tab-${tab.id}`}
+                  aria-controls={`admin-panel-${tab.id}`}
+                  tabIndex={isActive ? 0 : -1}
+                  onClick={() => setActiveTab(tab.id)}
+                  onKeyDown={(e) => handleTabKeyDown(e, idx)}
+                  className={`group relative px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2.5 transition-all duration-200 ease-out whitespace-nowrap flex-shrink-0 cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900 ${
+                    isActive
+                      ? 'bg-gradient-to-r from-[#087BFF] to-[#08D9E8] text-white shadow-md shadow-brand-blue/25 dark:shadow-glow-cyan/20 ring-1 ring-white/20'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/90 dark:hover:bg-slate-800/70 border border-transparent hover:border-slate-200/60 dark:hover:border-slate-700/50'
+                  }`}
+                >
+                  <Icon
+                    className={`w-4 h-4 transition-colors duration-200 flex-shrink-0 ${
+                      isActive
+                        ? 'text-white drop-shadow-xs'
+                        : 'text-slate-400 dark:text-slate-500 group-hover:text-brand-blue dark:group-hover:text-brand-cyan'
+                    }`}
+                  />
+                  <span className="tracking-tight">{tab.name}</span>
+
+                  {hasBadge && (
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold leading-none transition-colors ${
+                        isActive
+                          ? 'bg-white/25 text-white'
+                          : 'bg-brand-blue/10 dark:bg-brand-cyan/15 text-brand-blue dark:text-brand-cyan group-hover:bg-brand-blue/20'
+                      }`}
+                    >
+                      {badgeCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* Refined Context & Section Breadcrumb Bar */}
+        <div className="flex items-center justify-between px-2 pt-0.5 text-xs">
+          <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+            <span className="font-medium text-slate-700 dark:text-slate-300">Admin Portal</span>
+            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+            <span className="font-semibold text-brand-blue dark:text-brand-cyan">
+              {ADMIN_TABS.find((t) => t.id === activeTab)?.name}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3 text-[11px] text-slate-400 dark:text-slate-500">
+            <span className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="hidden sm:inline">Database Live •</span> PostgreSQL 16
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* TAB 1: DASHBOARD OVERVIEW */}
       {activeTab === 'overview' && (
-        <div className="space-y-8">
+        <div
+          role="tabpanel"
+          id="admin-panel-overview"
+          aria-labelledby="admin-tab-overview"
+          tabIndex={0}
+          className="space-y-8 focus-visible:outline-none"
+        >
           {/* KPI Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
             {[
@@ -363,7 +498,13 @@ export const AdminDashboardPage = () => {
 
       {/* TAB 2: INQUIRIES MANAGEMENT */}
       {activeTab === 'inquiries' && (
-        <div className="space-y-6">
+        <div
+          role="tabpanel"
+          id="admin-panel-inquiries"
+          aria-labelledby="admin-tab-inquiries"
+          tabIndex={0}
+          className="space-y-6 focus-visible:outline-none"
+        >
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-bold text-slate-900 dark:text-white">Project Inquiries CRM</h2>
             <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">Total: {inquiries.length} records</span>
@@ -423,7 +564,13 @@ export const AdminDashboardPage = () => {
 
       {/* TAB 3: PROJECTS MANAGEMENT */}
       {activeTab === 'projects' && (
-        <div className="space-y-6">
+        <div
+          role="tabpanel"
+          id="admin-panel-projects"
+          aria-labelledby="admin-tab-projects"
+          tabIndex={0}
+          className="space-y-6 focus-visible:outline-none"
+        >
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-bold text-slate-900 dark:text-white">Portfolio Showcase Projects</h2>
             <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">Count: {projects.length}</span>
@@ -453,7 +600,13 @@ export const AdminDashboardPage = () => {
 
       {/* TAB 4: CUSTOMERS DIRECTORY */}
       {activeTab === 'customers' && (
-        <div className="space-y-6">
+        <div
+          role="tabpanel"
+          id="admin-panel-customers"
+          aria-labelledby="admin-tab-customers"
+          tabIndex={0}
+          className="space-y-6 focus-visible:outline-none"
+        >
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-bold text-slate-900 dark:text-white">Registered Customer Directory</h2>
             <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">{customers.length} Customers</span>
@@ -492,7 +645,13 @@ export const AdminDashboardPage = () => {
 
       {/* TAB 5: AI & TEMPLATES CONFIGURATION */}
       {activeTab === 'ai' && (
-        <div className="max-w-3xl rounded-3xl glass-panel border border-slate-200 dark:border-slate-800 p-8 space-y-6 hover:shadow-soft">
+        <div
+          role="tabpanel"
+          id="admin-panel-ai"
+          aria-labelledby="admin-tab-ai"
+          tabIndex={0}
+          className="max-w-3xl rounded-3xl glass-panel border border-slate-200 dark:border-slate-800 p-8 space-y-6 hover:shadow-soft focus-visible:outline-none"
+        >
           <div className="space-y-1">
             <span className="text-xs font-mono font-bold text-brand-blue dark:text-brand-cyan uppercase">Model Engine Control</span>
             <h2 className="text-2xl font-bold text-slate-900 dark:text-white">AI Engine & Prototype Settings</h2>
@@ -555,7 +714,13 @@ export const AdminDashboardPage = () => {
 
       {/* TAB 6: SETTINGS */}
       {activeTab === 'settings' && (
-        <div className="max-w-3xl rounded-3xl glass-panel border border-slate-200 dark:border-slate-800 p-8 space-y-6 hover:shadow-soft">
+        <div
+          role="tabpanel"
+          id="admin-panel-settings"
+          aria-labelledby="admin-tab-settings"
+          tabIndex={0}
+          className="max-w-3xl rounded-3xl glass-panel border border-slate-200 dark:border-slate-800 p-8 space-y-6 hover:shadow-soft focus-visible:outline-none"
+        >
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Company & System Settings</h2>
           <div className="space-y-3">
             {settings.map((s) => (
@@ -573,7 +738,13 @@ export const AdminDashboardPage = () => {
 
       {/* TAB 7: AUDIT LOGS */}
       {activeTab === 'logs' && (
-        <div className="space-y-4">
+        <div
+          role="tabpanel"
+          id="admin-panel-logs"
+          aria-labelledby="admin-tab-logs"
+          tabIndex={0}
+          className="space-y-4 focus-visible:outline-none"
+        >
           <h2 className="text-xl font-bold text-slate-900 dark:text-white">Security & Audit Activity Logs</h2>
           <div className="rounded-2xl glass-panel border border-slate-200 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800/60 overflow-hidden text-xs shadow-sm">
             {activityLogs.map((log) => (
