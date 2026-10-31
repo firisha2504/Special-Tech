@@ -1,0 +1,175 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  /* Default & Light Theme Variables */
+  :root,
+  [data-theme="light"],
+  .light {
+    --bg-primary: #F8FAFC;
+    --bg-secondary: #FFFFFF;
+    --bg-section: #F1F5F9;
+    --bg-card: #FFFFFF;
+    --text-primary: #0F172A;
+    --text-secondary: #475569;
+    --text-muted: #64748B;
+    --text-light-muted: #94A3B8;
+    --border-color: #E2E8F0;
+    --primary-color: #087BFF;
+    --electric-blue: #0066FF;
+    --accent-color: #08D9E8;
+    --shadow-soft: 0 4px 20px -2px rgba(15, 23, 42, 0.06);
+    --shadow-card-hover: 0 12px 30px -4px rgba(8, 123, 255, 0.12);
+    --accent-gradient: linear-gradient(135deg, #087BFF, #08D9E8);
+  }
+
+  /* Preserved Dark Theme Variables */
+  [data-theme="dark"],
+  .dark {
+    --bg-primary: #020D20;
+    --bg-secondary: #07172E;
+    --bg-section: #07172E;
+    --bg-card: #0B1F3A;
+    --text-primary: #FFFFFF;
+    --text-secondary: #CBD5E1;
+    --text-muted: #A7B8D0;
+    --text-light-muted: #64748B;
+    --border-color: rgba(60, 140, 255, 0.2);
+    --primary-color: #087BFF;
+    --electric-blue: #0066FF;
+    --accent-color: #08D9E8;
+    --shadow-soft: 0 8px 32px 0 rgba(2, 13, 32, 0.6);
+    --shadow-card-hover: 0 0 30px -4px rgba(8, 123, 255, 0.45);
+    --accent-gradient: linear-gradient(135deg, #087BFF, #08D9E8);
+  }
+
+  html,
+  body,
+  #root {
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
+    overflow-x: clip;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
+  img,
+  video,
+  canvas,
+  svg {
+    max-width: 100%;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+}
+
+/* Glassmorphism & Card System */
+.glass-panel {
+  background: var(--bg-card);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-soft);
+  transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, transform 0.2s ease;
+}
+
+.dark .glass-panel,
+[data-theme="dark"] .glass-panel {
+  background: rgba(11, 31, 58, 0.75);
+  border: 1px solid rgba(60, 140, 255, 0.2);
+  box-shadow: 0 8px 32px 0 rgba(2, 13, 32, 0.6);
+}
+
+.light .glass-panel,
+[data-theme="light"] .glass-panel {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.06);
+}
+
+.light .glass-panel:hover,
+[data-theme="light"] .glass-panel:hover {
+  box-shadow: 0 12px 30px -4px rgba(8, 123, 255, 0.12);
+  border-color: rgba(8, 123, 255, 0.4);
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #020D20;
+}
+
+.light ::-webkit-scrollbar-track,
+[data-theme="light"] ::-webkit-scrollbar-track {
+  background: #F1F5F9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1E293B;
+  border-radius: 4px;
+}
+
+.light ::-webkit-scrollbar-thumb,
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #087BFF;
+}
+
+/* Background Grids */
+.bg-grid-pattern {
+  background-size: 40px 40px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+}
+
+.light .bg-grid-pattern,
+[data-theme="light"] .bg-grid-pattern {
+  background-size: 40px 40px;
+  background-image: 
+    linear-gradient(to right, rgba(15, 23, 42, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(15, 23, 42, 0.04) 1px, transparent 1px);
+}
+
+/* Mobile Responsive Typography Utilities */
+.hero-title {
+  font-size: clamp(2rem, 6vw, 4.25rem);
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.section-title {
+  font-size: clamp(1.6rem, 4vw, 2.75rem);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+/* Container safety utility */
+.responsive-container {
+  width: min(100% - 32px, 1280px);
+  margin-inline: auto;
+}

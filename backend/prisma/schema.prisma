@@ -1,0 +1,287 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  DEVELOPER
+}
+
+enum InquiryStatus {
+  NEW
+  UNDER_REVIEW
+  ESTIMATED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum MessageSender {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  passwordHash String
+  name         String
+  role         Role          @default(ADMIN)
+  avatar       String?
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  assignedInquiries Inquiry[]     @relation("AssignedToUser")
+  activityLogs      ActivityLog[]
+
+  @@map("users")
+}
+
+model Customer {
+  id        String         @id @default(uuid())
+  name      String
+  email     String         @unique
+  phone     String?
+  company   String?
+  notes     String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  inquiries     Inquiry[]
+  conversations Conversation[]
+
+  @@map("customers")
+}
+
+model TeamMember {
+  id          String   @id @default(uuid())
+  name        String
+  role        String
+  bio         String?
+  avatar      String?
+  skills      String[] @default([])
+  email       String?
+  phone       String?
+  isPublished Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("team_members")
+}
+
+model Project {
+  id           String    @id @default(uuid())
+  title        String
+  slug         String    @unique
+  category     String
+  shortDesc    String
+  description  String
+  features     String[]  @default([])
+  technologies String[]  @default([])
+  screenshots  String[]  @default([])
+  status       String    @default("Completed")
+  demoUrl      String?
+  githubUrl    String?
+  isFeatured   Boolean   @default(false)
+  isPublished  Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  inquiries Inquiry[]
+
+  @@map("projects")
+}
+
+model Service {
+  id           String   @id @default(uuid())
+  title        String
+  slug         String   @unique
+  icon         String   @default("Code")
+  description  String
+  problemsSolv String[] @default([])
+  benefits     String[] @default([])
+  features     String[] @default([])
+  technologies String[] @default([])
+  isPublished  Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  inquiries Inquiry[]
+
+  @@map("services")
+}
+
+model Inquiry {
+  id                 String         @id @default(uuid())
+  inquiryNumber      String         @unique
+  customerId         String
+  serviceId          String?
+  projectId          String?
+  title              String
+  message            String
+  status             InquiryStatus  @default(NEW)
+  priority           Priority       @default(MEDIUM)
+  budget             String?
+  preferredContact   String?        @default("Email")
+  assignedToUserId   String?
+  internalNotes      String?
+  requirementId      String?        @unique
+  prototypeVersionId String?
+  attachmentUrl      String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  customer         Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  service          Service?          @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  project          Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  assignedTo       User?             @relation("AssignedToUser", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  requirement      Requirement?      @relation(fields: [requirementId], references: [id], onDelete: SetNull)
+  prototypeVersion PrototypeVersion? @relation(fields: [prototypeVersionId], references: [id], onDelete: SetNull)
+
+  @@map("inquiries")
+}
+
+model Conversation {
+  id           String        @id @default(uuid())
+  customerId   String?
+  sessionToken String        @unique
+  title        String        @default("New Project Discovery")
+  status       String        @default("ACTIVE")
+  metadata     Json?         @default("{}")
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  customer     Customer?     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  messages     Message[]
+  requirements Requirement[]
+  prototypes   Prototype[]
+
+  @@map("conversations")
+}
+
+model Message {
+  id             String        @id @default(uuid())
+  conversationId String
+  sender         MessageSender
+  content        String
+  attachments    String[]      @default([])
+  metadata       Json?         @default("{}")
+  createdAt      DateTime      @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+model Requirement {
+  id                 String    @id @default(uuid())
+  conversationId     String?
+  projectName        String
+  overview           String
+  problemStatement   String
+  objectives         String[]  @default([])
+  targetUsers        String[]  @default([])
+  userRoles          Json?     @default("[]")
+  functionalReqs     Json?     @default("[]")
+  nonFunctionalReqs  Json?     @default("[]")
+  modules            Json?     @default("[]")
+  recommendedTech    Json?     @default("[]")
+  deliverables       String[]  @default([])
+  status             String    @default("DRAFT")
+  version            Int       @default(1)
+  approvedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  inquiry      Inquiry?
+
+  @@map("requirements")
+}
+
+model Prototype {
+  id               String   @id @default(uuid())
+  conversationId   String?
+  systemType       String
+  title            String
+  description      String
+  category         String
+  currentVersionId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  conversation Conversation?      @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  versions     PrototypeVersion[]
+
+  @@map("prototypes")
+}
+
+model PrototypeVersion {
+  id            String   @id @default(uuid())
+  prototypeId   String
+  versionNumber Int      @default(1)
+  configuration Json
+  changeNotes   String?
+  createdBy     String   @default("AI Assistant")
+  createdAt     DateTime @default(now())
+
+  prototype Prototype @relation(fields: [prototypeId], references: [id], onDelete: Cascade)
+  inquiries Inquiry[]
+
+  @@map("prototype_versions")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  title     String
+  message   String
+  type      String   @default("info")
+  isRead    Boolean  @default(false)
+  link      String?
+  metadata  Json?    @default("{}")
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}
+
+model AdminSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String
+  description String?
+  isPublic    Boolean  @default(false)
+  updatedAt   DateTime @updatedAt
+
+  @@map("admin_settings")
+}
+
+model ActivityLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  action     String
+  entityType String
+  entityId   String?
+  details    Json?    @default("{}")
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("activity_logs")
+}
