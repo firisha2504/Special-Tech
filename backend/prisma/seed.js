@@ -9,6 +9,12 @@ async function main() {
   // Clean existing records if any
   await prisma.activityLog.deleteMany({});
   await prisma.notification.deleteMany({});
+  await prisma.productDemoRequest.deleteMany({});
+  await prisma.productPlan.deleteMany({});
+  await prisma.productFeature.deleteMany({});
+  await prisma.productImage.deleteMany({});
+  await prisma.product.deleteMany({});
+  await prisma.projectImage.deleteMany({});
   await prisma.inquiry.deleteMany({});
   await prisma.prototypeVersion.deleteMany({});
   await prisma.prototype.deleteMany({});
@@ -634,17 +640,211 @@ async function main() {
     },
   });
 
-  await prisma.activityLog.create({
-    data: {
-      userId: adminUser.id,
-      action: 'SYSTEM_INITIALIZED',
-      entityType: 'SYSTEM',
-      entityId: adminUser.id,
-      details: { note: 'Database initialized with full production seed data.' },
+  // 8. Special Tech Company Products & Solutions
+  const products = [
+    {
+      name: 'SpecialFlow AI',
+      slug: 'specialflow-ai',
+      category: 'AI & Automation',
+      shortDesc: 'Autonomous multi-agent orchestration engine for complex business processes, document extraction, and real-time decision routing.',
+      description: 'SpecialFlow AI bridges high-performance Large Language Models with deterministic business rules. Designed for mission-critical operations where reliability, strict SLA guardrails, and deterministic outcomes are mandatory.',
+      logoUrl: '/logo/special-tech-icon.png',
+      coverImage: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1200&q=80',
+      screenshots: [
+        'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1200&q=80',
+        'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1200&q=80',
+      ],
+      features: [
+        'Multi-Agent Collaborative Task Execution',
+        'Enterprise Vector Retrieval-Augmented Generation (RAG)',
+        'Zero-Hallucination Guardrails & Confidence Scoring',
+        'Bidirectional Webhook Integrations (Slack, CRM, ERP)',
+      ],
+      technologies: ['Node.js', 'Python', 'PostgreSQL', 'pgvector', 'Redis', 'Docker'],
+      targetAudience: 'Enterprise IT leaders, Operations Executives, and High-Growth Fintechs',
+      benefits: [
+        'Reduces manual business process latency by up to 85%',
+        'Full audit traceability of every AI decision path',
+        'Deployable on-premise or cloud with zero vendor lock-in',
+      ],
+      docsUrl: 'https://docs.specialtech.com/specialflow',
+      demoUrl: 'https://specialflow.demo.specialtech.com',
+      howItWorks: '1. Connect data streams and document sources. 2. Define business goals and evaluation constraints. 3. Specialized AI agents execute tasks in parallel with human-in-the-loop approvals.',
+      faqs: [
+        { q: 'Can SpecialFlow AI run on our private VPC?', a: 'Yes, SpecialFlow AI supports full self-hosted Docker and Kubernetes deployments inside your AWS, Azure, or GCP private VPC.' },
+        { q: 'How does it prevent AI hallucinations?', a: 'Every generated conclusion is cross-verified against your verified ground-truth documents using deterministic validation schemas.' },
+      ],
+      status: 'Published',
+      isFeatured: true,
+      isPublished: true,
+      plans: [
+        {
+          name: 'Starter Cloud',
+          price: 79.00,
+          billingInterval: 'monthly',
+          features: ['Up to 5 AI Agents', '50,000 monthly executions', 'Standard RAG pipeline', 'Email support'],
+          isPopular: false,
+        },
+        {
+          name: 'Professional Team',
+          price: 249.00,
+          billingInterval: 'monthly',
+          features: ['Unlimited AI Agents', '500,000 monthly executions', 'Private Vector Database', 'Custom Model Fine-tuning', 'Priority 24/7 SLA Support'],
+          isPopular: true,
+        },
+        {
+          name: 'Enterprise Dedicated',
+          price: 899.00,
+          billingInterval: 'monthly',
+          features: ['On-Premise / VPC Deployment', 'Unlimited Executions', 'Dedicated Solutions Architect', 'Custom Security Compliance (SOC2 / HIPAA)'],
+          isPopular: false,
+        },
+      ],
     },
-  });
+    {
+      name: 'OmniPulse Cloud ERP',
+      slug: 'omnipulse-cloud-erp',
+      category: 'Enterprise SaaS',
+      shortDesc: 'Modern cloud enterprise resource planning suite unifying multi-entity accounting, warehouse inventory, order fulfillment, and payroll.',
+      description: 'OmniPulse replaces fragmented legacy systems with a single lightning-fast database architecture. Built specifically for medium-to-large distributors, manufacturing operations, and service organizations.',
+      logoUrl: '/logo/special-tech-icon.png',
+      coverImage: 'https://images.unsplash.com/photo-1504868584819-f8e8b4b6d7e3?auto=format&fit=crop&w=1200&q=80',
+      screenshots: [
+        'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1200&q=80',
+        'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1200&q=80',
+      ],
+      features: [
+        'Real-Time Multi-Warehouse Stock & Lot Tracking',
+        'Automated General Ledger & Double-Entry Accounting',
+        'Multi-Currency Invoicing & Tax Compliance Engine',
+        'Role-Based Granular Access Control & Security Auditing',
+      ],
+      technologies: ['React', 'TypeScript', 'Node.js', 'PostgreSQL', 'Prisma', 'Tailwind CSS'],
+      targetAudience: 'Growing enterprises, supply chain distributors, and multi-location businesses',
+      benefits: [
+        'Single source of truth eliminates inventory discrepancies',
+        'Automates monthly accounting closing from weeks to hours',
+        'Sub-second report generation across millions of transaction lines',
+      ],
+      docsUrl: 'https://docs.specialtech.com/omnipulse',
+      demoUrl: 'https://omnipulse.demo.specialtech.com',
+      howItWorks: '1. Import charts of accounts and inventory master catalogs. 2. Configure approval workflows and role permissions. 3. Manage purchase orders, sales transactions, and automated bank reconciliation.',
+      faqs: [
+        { q: 'Can OmniPulse integrate with our existing e-commerce storefronts?', a: 'Yes, OmniPulse features bi-directional REST and GraphQL APIs for Shopify, WooCommerce, and custom web applications.' },
+      ],
+      status: 'Published',
+      isFeatured: true,
+      isPublished: true,
+      plans: [
+        {
+          name: 'Business',
+          price: 149.00,
+          billingInterval: 'monthly',
+          features: ['Up to 15 Users', 'Single Organization', 'Core Accounting & Inventory', 'Automated Daily Backups'],
+          isPopular: false,
+        },
+        {
+          name: 'Enterprise Growth',
+          price: 399.00,
+          billingInterval: 'monthly',
+          features: ['Unlimited Users', 'Multi-Entity & Multi-Currency', 'Advanced Warehouse Management', 'API Access & Webhooks', 'Dedicated Support Lead'],
+          isPopular: true,
+        },
+      ],
+    },
+    {
+      name: 'CyberGuard Vault',
+      slug: 'cyberguard-vault',
+      category: 'Security & DevOps',
+      shortDesc: 'Zero-knowledge secrets manager, automated API credential rotation, and CI/CD security compliance auditing for engineering teams.',
+      description: 'CyberGuard Vault protects your engineering infrastructure from credential leaks. Enforce automatic password and API key rotation, detect secrets committed to Git repositories, and maintain audit-ready compliance logs.',
+      logoUrl: '/logo/special-tech-icon.png',
+      coverImage: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80',
+      screenshots: [
+        'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80',
+      ],
+      features: [
+        'Hardware-Backed AES-GCM 256-bit Encryption',
+        'Automated Dynamic Credential & SSH Key Rotation',
+        'Pre-Commit Git Hooks for Secret Detection',
+        'SOC2 Type II & ISO27001 Compliance Reporting',
+      ],
+      technologies: ['Go', 'Node.js', 'PostgreSQL', 'Cryptography API', 'Docker'],
+      targetAudience: 'DevOps engineers, CTOs, and compliance-driven development teams',
+      benefits: [
+        'Guaranteed zero secrets hardcoded in source code',
+        'Instant emergency revocation across all cloud servers in 1 click',
+        'Comprehensive audit log of every credential access',
+      ],
+      docsUrl: 'https://docs.specialtech.com/cyberguard',
+      demoUrl: 'https://cyberguard.demo.specialtech.com',
+      howItWorks: '1. Install the CLI or Kubernetes operator. 2. Define secret stores and rotation policies. 3. Applications receive short-lived credentials dynamically at runtime.',
+      faqs: [
+        { q: 'How is data encrypted?', a: 'Secrets are encrypted client-side using envelopes encrypted with AES-256-GCM before ever leaving your network.' },
+      ],
+      status: 'Published',
+      isFeatured: false,
+      isPublished: true,
+      plans: [
+        {
+          name: 'Developer Free',
+          price: 0.00,
+          billingInterval: 'free',
+          features: ['Up to 3 Users', '100 Secrets', 'CLI & GitHub Action integration', 'Community Support'],
+          isPopular: false,
+        },
+        {
+          name: 'Pro Security',
+          price: 49.00,
+          billingInterval: 'monthly',
+          features: ['Up to 25 Users', 'Unlimited Secrets', 'Automated Credential Rotation', 'Audit Trail Export', 'Slack Alerts'],
+          isPopular: true,
+        },
+      ],
+    },
+  ];
 
-  console.log(`✅ Sample Customer, Conversation, Requirement, Prototype, and Inquiry created!`);
+  for (const prodData of products) {
+    const { plans, ...productInfo } = prodData;
+    const createdProduct = await prisma.product.create({
+      data: {
+        ...productInfo,
+        plans: {
+          create: plans.map((p, idx) => ({
+            name: p.name,
+            price: p.price,
+            billingInterval: p.billingInterval,
+            features: p.features,
+            isPopular: p.isPopular,
+            sortOrder: idx,
+          })),
+        },
+      },
+    });
+
+    console.log(`✅ Product created: ${createdProduct.name} with ${plans.length} plans`);
+  }
+
+  // 9. Sample Demo Request
+  const specialFlowProduct = await prisma.product.findUnique({ where: { slug: 'specialflow-ai' } });
+  if (specialFlowProduct) {
+    await prisma.productDemoRequest.create({
+      data: {
+        name: 'Sarah Jenkins',
+        email: 'sarah.jenkins@meridiancorp.com',
+        phone: '+1 (555) 782-9901',
+        company: 'Meridian Capital Partners',
+        productId: specialFlowProduct.id,
+        productName: specialFlowProduct.name,
+        requirements: 'Interested in automating loan document risk analysis for our underwriting team. Expecting around 2,500 daily documents.',
+        status: 'NEW',
+        internalNotes: 'High-value enterprise lead. Prepare a customized mortgage document extraction demo.',
+      },
+    });
+    console.log('✅ Sample Product Demo Request created');
+  }
+
+  console.log(`✅ Sample Customer, Conversation, Requirement, Prototype, Inquiry, Products, and Demo Requests created!`);
   console.log('🎉 Seeding successfully completed!');
 }
 

@@ -11,6 +11,8 @@ import aiRoutes from './routes/aiRoutes.js';
 import prototypeRoutes from './routes/prototypeRoutes.js';
 import inquiryRoutes from './routes/inquiryRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
+import productRoutes from './routes/productRoutes.js';
+import demoRequestRoutes from './routes/demoRequestRoutes.js';
 
 dotenv.config();
 
@@ -44,6 +46,8 @@ app.get('/api/health', (req, res) => {
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/demo-requests', demoRequestRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/prototypes', prototypeRoutes);

@@ -20,10 +20,39 @@ api.interceptors.request.use(
 
 export const projectApi = {
   getAll: (params) => api.get('/projects', { params }),
+  getFeatured: () => api.get('/projects/featured'),
   getBySlug: (slug) => api.get(`/projects/${slug}`),
+  getById: (id) => api.get(`/projects/admin/detail/${id}`),
   create: (data) => api.post('/projects', data),
   update: (id, data) => api.put(`/projects/${id}`, data),
+  updateStatus: (id, data) => api.patch(`/projects/${id}/status`, data),
   delete: (id) => api.delete(`/projects/${id}`),
+  uploadImage: (formData) =>
+    api.post('/projects/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+};
+
+export const productApi = {
+  getAll: (params) => api.get('/products', { params }),
+  getFeatured: () => api.get('/products/featured'),
+  getBySlug: (slug) => api.get(`/products/${slug}`),
+  getById: (id) => api.get(`/products/admin/detail/${id}`),
+  create: (data) => api.post('/products', data),
+  update: (id, data) => api.put(`/products/${id}`, data),
+  updateStatus: (id, data) => api.patch(`/products/${id}/status`, data),
+  delete: (id) => api.delete(`/products/${id}`),
+  uploadImage: (formData) =>
+    api.post('/products/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+};
+
+export const demoRequestApi = {
+  submit: (data) => api.post('/demo-requests', data),
+  getAll: (params) => api.get('/demo-requests', { params }),
+  updateStatus: (id, data) => api.patch(`/demo-requests/${id}/status`, data),
+  delete: (id) => api.delete(`/demo-requests/${id}`),
 };
 
 export const serviceApi = {

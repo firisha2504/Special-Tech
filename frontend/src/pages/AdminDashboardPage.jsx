@@ -28,13 +28,17 @@ import {
   X,
   Filter,
   RefreshCw,
+  Package,
 } from 'lucide-react';
 import Logo from '../components/common/Logo';
+import AdminProjectManager from '../features/admin/AdminProjectManager';
+import AdminProductManager from '../features/admin/AdminProductManager';
 
 const ADMIN_TABS = [
   { id: 'overview', name: 'Overview', icon: LayoutDashboard },
   { id: 'inquiries', name: 'Inquiries & Proposals', icon: Inbox, countKey: 'newInquiries' },
   { id: 'projects', name: 'Portfolio Projects', icon: Briefcase },
+  { id: 'products', name: 'Products & Solutions', icon: Package, countKey: 'newDemoRequests' },
   { id: 'customers', name: 'Customer Directory', icon: Users },
   { id: 'ai', name: 'AI & Templates', icon: Cpu },
   { id: 'settings', name: 'Settings', icon: Settings },
@@ -52,7 +56,7 @@ export const AdminDashboardPage = () => {
   const [loggingIn, setLoggingIn] = useState(false);
 
   // Active admin tab with URL search parameter persistence
-  const validTabIds = ['overview', 'inquiries', 'projects', 'customers', 'ai', 'settings', 'logs'];
+  const validTabIds = ['overview', 'inquiries', 'projects', 'products', 'customers', 'ai', 'settings', 'logs'];
   const urlTab = searchParams.get('tab');
   const initialTab = validTabIds.includes(urlTab) ? urlTab : 'overview';
   const [activeTab, setActiveTabState] = useState(initialTab);
@@ -329,8 +333,8 @@ export const AdminDashboardPage = () => {
             {ADMIN_TABS.map((tab, idx) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
-              const hasBadge = tab.countKey === 'newInquiries' && stats?.kpis?.newInquiries > 0;
-              const badgeCount = stats?.kpis?.newInquiries;
+              const hasBadge = Boolean(tab.countKey && stats?.kpis?.[tab.countKey] > 0);
+              const badgeCount = tab.countKey ? stats?.kpis?.[tab.countKey] : 0;
 
               return (
                 <button
@@ -404,18 +408,25 @@ export const AdminDashboardPage = () => {
           className="space-y-8 focus-visible:outline-none"
         >
           {/* KPI Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             {[
               { label: 'Total Inquiries', value: stats?.kpis?.totalInquiries ?? 0, color: 'text-slate-900 dark:text-white' },
               { label: 'New Inquiries', value: stats?.kpis?.newInquiries ?? 0, color: 'text-brand-blue dark:text-brand-cyan' },
-              { label: 'In Review', value: stats?.kpis?.pendingInquiries ?? 0, color: 'text-amber-500 dark:text-amber-400' },
-              { label: 'Total Customers', value: stats?.kpis?.totalCustomers ?? 0, color: 'text-emerald-600 dark:text-emerald-400' },
-              { label: 'Published Projects', value: stats?.kpis?.activeProjects ?? 0, color: 'text-blue-600 dark:text-blue-400' },
-              { label: 'Total Projects', value: stats?.kpis?.totalProjects ?? 0, color: 'text-violet-600 dark:text-violet-400' },
+              { label: 'Portfolio Projects', value: `${stats?.kpis?.activeProjects ?? 0} / ${stats?.kpis?.totalProjects ?? 0}`, color: 'text-blue-600 dark:text-blue-400' },
+              { label: 'Company Products', value: `${stats?.kpis?.activeProducts ?? 0} / ${stats?.kpis?.totalProducts ?? 0}`, color: 'text-emerald-600 dark:text-emerald-400' },
+              { label: 'Demo Requests', value: stats?.kpis?.totalDemoRequests ?? 0, sub: stats?.kpis?.newDemoRequests > 0 ? `${stats?.kpis?.newDemoRequests} new` : null, color: 'text-cyan-600 dark:text-cyan-400' },
+              { label: 'Registered Clients', value: stats?.kpis?.totalCustomers ?? 0, color: 'text-violet-600 dark:text-violet-400' },
             ].map((kpi, idx) => (
               <div key={idx} className="p-4 rounded-2xl glass-panel border border-slate-200 dark:border-slate-800 space-y-1 hover:shadow-soft">
                 <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium block">{kpi.label}</span>
-                <span className={`text-2xl font-black ${kpi.color}`}>{kpi.value}</span>
+                <div className="flex items-baseline gap-1.5">
+                  <span className={`text-2xl font-black ${kpi.color}`}>{kpi.value}</span>
+                  {kpi.sub && (
+                    <span className="text-[10px] font-bold text-brand-blue dark:text-brand-cyan px-1.5 py-0.5 rounded-full bg-blue-50 dark:bg-brand-blue/20">
+                      {kpi.sub}
+                    </span>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -571,30 +582,20 @@ export const AdminDashboardPage = () => {
           tabIndex={0}
           className="space-y-6 focus-visible:outline-none"
         >
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-slate-900 dark:text-white">Portfolio Showcase Projects</h2>
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">Count: {projects.length}</span>
-          </div>
+          <AdminProjectManager />
+        </div>
+      )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {projects.map((proj) => (
-              <div key={proj.id} className="p-5 rounded-2xl glass-panel border border-slate-200 dark:border-slate-800 space-y-3 hover:shadow-soft">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-brand-blue dark:text-brand-cyan font-mono">{proj.category}</span>
-                  <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">{proj.status}</span>
-                </div>
-                <h3 className="font-bold text-slate-900 dark:text-white text-base">{proj.title}</h3>
-                <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2">{proj.shortDesc}</p>
-                <div className="pt-2 flex flex-wrap gap-1">
-                  {proj.technologies?.slice(0, 4).map((t) => (
-                    <span key={t} className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] text-slate-700 dark:text-slate-300 font-mono">
-                      {t}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+      {/* TAB: PRODUCTS & SOLUTIONS MANAGEMENT */}
+      {activeTab === 'products' && (
+        <div
+          role="tabpanel"
+          id="admin-panel-products"
+          aria-labelledby="admin-tab-products"
+          tabIndex={0}
+          className="space-y-6 focus-visible:outline-none"
+        >
+          <AdminProductManager />
         </div>
       )}
 

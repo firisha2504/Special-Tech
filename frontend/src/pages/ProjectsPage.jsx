@@ -124,24 +124,23 @@ export const ProjectsPage = () => {
                 className="rounded-3xl glass-panel border border-slate-200 dark:border-slate-800/80 overflow-hidden group hover:border-brand-blue/50 transition-all duration-300 hover:-translate-y-2 hover:shadow-soft flex flex-col justify-between"
               >
                 <div>
-                  <div className="h-52 overflow-hidden relative cursor-pointer" onClick={() => setActiveProject(proj)}>
+                  <Link to={`/projects/${proj.slug || proj.id}`} className="block h-52 overflow-hidden relative cursor-pointer">
                     <img
-                      src={proj.screenshots?.[0] || 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80'}
+                      src={proj.coverImage || proj.screenshots?.[0] || 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80'}
                       alt={proj.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                     <div className="absolute top-3 left-3 px-3 py-1 rounded-full text-[10px] font-bold bg-slate-950/80 text-brand-cyan backdrop-blur-md border border-brand-cyan/30">
                       {proj.category}
                     </div>
-                  </div>
+                  </Link>
 
                   <div className="p-6 space-y-3">
-                    <h3
-                      onClick={() => setActiveProject(proj)}
-                      className="text-xl font-bold text-slate-900 dark:text-white group-hover:text-brand-blue dark:group-hover:text-brand-cyan transition-colors cursor-pointer"
-                    >
-                      {proj.title}
-                    </h3>
+                    <Link to={`/projects/${proj.slug || proj.id}`}>
+                      <h3 className="text-xl font-bold text-slate-900 dark:text-white group-hover:text-brand-blue dark:group-hover:text-brand-cyan transition-colors cursor-pointer">
+                        {proj.title}
+                      </h3>
+                    </Link>
                     <p className="text-slate-600 dark:text-slate-400 text-xs leading-relaxed line-clamp-3">
                       {proj.shortDesc}
                     </p>
@@ -157,18 +156,20 @@ export const ProjectsPage = () => {
                 </div>
 
                 <div className="p-6 pt-0 border-t border-slate-100 dark:border-slate-800/60 mt-4 flex items-center justify-between">
-                  <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse" />
-                    {proj.status}
-                  </span>
-
                   <button
                     onClick={() => setActiveProject(proj)}
-                    className="text-xs font-semibold text-brand-blue dark:text-brand-cyan hover:underline flex items-center gap-1.5 transition-colors"
+                    className="text-xs text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white font-medium transition-colors"
                   >
-                    <span>View System Specs</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
+                    Quick Specs
                   </button>
+
+                  <Link
+                    to={`/projects/${proj.slug || proj.id}`}
+                    className="text-xs font-bold text-brand-blue dark:text-brand-cyan hover:underline flex items-center gap-1.5 transition-colors"
+                  >
+                    <span>View Case Study</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
                 </div>
               </div>
             ))}
@@ -272,13 +273,23 @@ export const ProjectsPage = () => {
                 )}
               </div>
 
-              <Link
-                to="/ai-assistant"
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-blue/10 dark:bg-brand-cyan/20 text-brand-blue dark:text-brand-cyan hover:bg-brand-blue hover:text-white dark:hover:bg-brand-cyan dark:hover:text-slate-950 font-bold text-xs transition-colors"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Build Similar System with AI</span>
-              </Link>
+              <div className="flex items-center gap-3">
+                <Link
+                  to={`/projects/${activeProject.slug || activeProject.id}`}
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold text-xs hover:opacity-90 transition-opacity"
+                >
+                  <span>Full Case Study</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+
+                <Link
+                  to="/ai-assistant"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-blue/10 dark:bg-brand-cyan/20 text-brand-blue dark:text-brand-cyan hover:bg-brand-blue hover:text-white dark:hover:bg-brand-cyan dark:hover:text-slate-950 font-bold text-xs transition-colors"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Build with AI</span>
+                </Link>
+              </div>
             </div>
           </div>
         </div>
