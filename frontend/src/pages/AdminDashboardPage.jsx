@@ -35,6 +35,7 @@ import {
   Server,
   Sliders,
   FileText,
+  ShieldCheck,
 } from 'lucide-react';
 import Logo from '../components/common/Logo';
 import AdminLayout from '../layouts/AdminLayout';

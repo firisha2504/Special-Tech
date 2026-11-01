@@ -1,5 +1,6 @@
 import prisma from '../config/db.js';
 import { projectSchema } from '../validators/schemas.js';
+import { notifyProjectStatusChange } from '../services/notification/notificationService.js';
 
 export const getAllProjects = async (req, res, next) => {
   try {
@@ -31,6 +32,16 @@ export const getAllProjects = async (req, res, next) => {
       where,
       orderBy: { createdAt: 'desc' },
       include: {
+        customer: {
+          select: { id: true, name: true, email: true, company: true, phone: true },
+        },
+        statusHistory: {
+          take: 1,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            changedBy: { select: { id: true, name: true, email: true } },
+          },
+        },
         projectImages: {
           orderBy: { sortOrder: 'asc' },
         },
@@ -112,6 +123,14 @@ export const getProjectById = async (req, res, next) => {
     const project = await prisma.project.findUnique({
       where: { id },
       include: {
+        customer: true,
+        statusHistory: {
+          orderBy: { createdAt: 'desc' },
+          include: {
+            changedBy: { select: { id: true, name: true, email: true } },
+            customer: { select: { id: true, name: true, email: true } },
+          },
+        },
         projectImages: {
           orderBy: { sortOrder: 'asc' },
         },
@@ -142,7 +161,7 @@ export const createProject = async (req, res, next) => {
         ...restData,
         completionDate: completionDate ? new Date(completionDate) : null,
       },
-      include: { projectImages: true },
+      include: { projectImages: true, customer: true },
     });
 
     await prisma.activityLog.create({
@@ -184,7 +203,7 @@ export const updateProject = async (req, res, next) => {
     const project = await prisma.project.update({
       where: { id },
       data: updateData,
-      include: { projectImages: true },
+      include: { projectImages: true, customer: true },
     });
 
     await prisma.activityLog.create({
@@ -206,29 +225,129 @@ export const updateProject = async (req, res, next) => {
 export const updateProjectStatus = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { status, isPublished, isFeatured } = req.body;
+    const { status, message, progress, customerId, isPublished, isFeatured } = req.body;
+
+    const current = await prisma.project.findUnique({
+      where: { id },
+      include: { customer: true },
+    });
+
+    if (!current) {
+      return res.status(404).json({ success: false, message: 'Project not found' });
+    }
+
+    const previousStatus = current.status;
+    const isStatusChanging = status && status.trim().toLowerCase() !== (current.status || '').trim().toLowerCase();
 
     const data = {};
     if (status !== undefined) data.status = status;
+    if (progress !== undefined) data.progress = Math.min(100, Math.max(0, Number(progress) || 0));
+    if (customerId !== undefined) data.customerId = customerId || null;
     if (isPublished !== undefined) data.isPublished = Boolean(isPublished);
     if (isFeatured !== undefined) data.isFeatured = Boolean(isFeatured);
 
     const project = await prisma.project.update({
       where: { id },
       data,
-    });
-
-    await prisma.activityLog.create({
-      data: {
-        userId: req.user?.id,
-        action: 'PROJECT_STATUS_UPDATED',
-        entityType: 'PROJECT',
-        entityId: project.id,
-        details: { status: project.status, isPublished: project.isPublished, isFeatured: project.isFeatured },
+      include: {
+        customer: true,
+        projectImages: true,
       },
     });
 
-    res.json({ success: true, data: project });
+    let historyRecord = null;
+    let deliveryReport = {
+      duplicateSkipped: !isStatusChanging,
+      inApp: { success: true, status: isStatusChanging ? 'DELIVERED' : 'skipped' },
+      email: { success: true, status: isStatusChanging ? 'sent' : 'skipped' },
+      sms: { success: true, status: 'skipped' },
+    };
+
+    // If status changed, record status transition in ProjectStatusHistory & trigger notifications!
+    if (isStatusChanging) {
+      historyRecord = await prisma.projectStatusHistory.create({
+        data: {
+          projectId: project.id,
+          customerId: project.customerId || null,
+          changedById: req.user?.id || null,
+          previousStatus,
+          newStatus: status,
+          message: message?.trim() || null,
+        },
+        include: {
+          changedBy: { select: { id: true, name: true, email: true } },
+          customer: { select: { id: true, name: true, email: true } },
+        },
+      });
+
+      // Dispatch automatic multi-channel customer notifications
+      deliveryReport = await notifyProjectStatusChange({
+        project,
+        customer: project.customer,
+        previousStatus,
+        newStatus: status,
+        message: message?.trim() || '',
+        changedBy: req.user,
+        progress: project.progress,
+      });
+
+      await prisma.activityLog.create({
+        data: {
+          userId: req.user?.id,
+          action: 'PROJECT_STATUS_CHANGED',
+          entityType: 'PROJECT',
+          entityId: project.id,
+          details: {
+            previousStatus,
+            newStatus: status,
+            message: message?.trim() || null,
+            progress: project.progress,
+            customerId: project.customerId,
+            delivery: deliveryReport,
+          },
+        },
+      });
+    } else {
+      await prisma.activityLog.create({
+        data: {
+          userId: req.user?.id,
+          action: 'PROJECT_UPDATED',
+          entityType: 'PROJECT',
+          entityId: project.id,
+          details: { status: project.status, isPublished: project.isPublished, isFeatured: project.isFeatured },
+        },
+      });
+    }
+
+    res.json({
+      success: true,
+      statusChanged: isStatusChanging,
+      message: isStatusChanging ? `Project status updated to ${status}` : 'Project updated successfully (status unchanged)',
+      data: project,
+      history: historyRecord,
+      delivery: {
+        ...deliveryReport,
+        skipped: !isStatusChanging,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getProjectStatusHistory = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const history = await prisma.projectStatusHistory.findMany({
+      where: { projectId: id },
+      include: {
+        changedBy: { select: { id: true, name: true, email: true } },
+        customer: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json({ success: true, count: history.length, data: history });
   } catch (err) {
     next(err);
   }

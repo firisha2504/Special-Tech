@@ -28,6 +28,7 @@ export const projectApi = {
   create: (data) => api.post('/projects', data),
   update: (id, data) => api.put(`/projects/${id}`, data),
   updateStatus: (id, data) => api.patch(`/projects/${id}/status`, data),
+  getHistory: (id) => api.get(`/projects/${id}/history`),
   delete: (id) => api.delete(`/projects/${id}`),
   uploadImage: (formData) =>
     api.post('/projects/upload', formData, {
@@ -116,7 +117,35 @@ export const rbacApi = {
   updateStatus: (id, data) => api.patch(`/admin/users/${id}/status`, data),
   updatePermissions: (id, data) => api.put(`/admin/users/${id}/permissions`, data),
   deleteUser: (id) => api.delete(`/admin/users/${id}`),
-  exportBackup: () => api.get('/admin/backups/export'),
+};
+
+export const customerClient = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+customerClient.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('customer_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+export const customerApi = {
+  login: (data) => customerClient.post('/customer/auth/login', data),
+  getProfile: () => customerClient.get('/customer/auth/me'),
+  getProjects: () => customerClient.get('/customer/projects'),
+  getProjectById: (id) => customerClient.get(`/customer/projects/${id}`),
+  getNotifications: (params) => customerClient.get('/customer/notifications', { params }),
+  markNotificationRead: (id) => customerClient.patch(`/customer/notifications/${id}/read`),
+  markAllNotificationsRead: () => customerClient.patch('/customer/notifications/read-all'),
+  deleteNotification: (id) => customerClient.delete(`/customer/notifications/${id}`),
 };
 
 export default api;

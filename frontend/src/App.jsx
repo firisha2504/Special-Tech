@@ -10,6 +10,7 @@ import ProductsPage from './pages/ProductsPage';
 import ProductDetailPage from './pages/ProductDetailPage';
 import ContactPage from './pages/ContactPage';
 import AIAssistantPage from './pages/AIAssistantPage';
+import MyProjectsPage from './pages/MyProjectsPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 
 export const App = () => {
@@ -26,6 +27,7 @@ export const App = () => {
         <Route path="/products/:slug" element={<ProductDetailPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/ai-assistant" element={<AIAssistantPage />} />
+        <Route path="/my-projects" element={<MyProjectsPage />} />
       </Route>
 
       {/* Dedicated Admin Portal Route */}

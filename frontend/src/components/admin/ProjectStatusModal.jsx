@@ -1,0 +1,511 @@
+import React, { useState, useEffect } from 'react';
+import {
+  X,
+  Sliders,
+  CheckCircle2,
+  AlertCircle,
+  Save,
+  RefreshCw,
+  Mail,
+  Smartphone,
+  Bell,
+  ArrowRight,
+  Shield,
+  User,
+  Building,
+  Check,
+  AlertTriangle,
+} from 'lucide-react';
+import { projectApi } from '../../services/api';
+
+const STATUS_OPTIONS = [
+  {
+    value: 'Pending',
+    label: 'Pending',
+    badge: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30',
+    activeBg: 'border-amber-500 bg-amber-500/10 text-amber-700 dark:text-amber-300 ring-2 ring-amber-500/40',
+    description: 'Initial intake, awaiting scope and engineering approval',
+    dot: 'bg-amber-500',
+  },
+  {
+    value: 'Approved',
+    label: 'Approved',
+    badge: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30',
+    activeBg: 'border-blue-500 bg-blue-500/10 text-blue-700 dark:text-blue-300 ring-2 ring-blue-500/40',
+    description: 'Approved for development; architecture and team assigned',
+    dot: 'bg-blue-500',
+  },
+  {
+    value: 'In Progress',
+    label: 'In Progress',
+    badge: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/30',
+    activeBg: 'border-cyan-500 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 ring-2 ring-cyan-500/40',
+    description: 'Active design, coding, and feature engineering ongoing',
+    dot: 'bg-cyan-500 animate-pulse',
+  },
+  {
+    value: 'Under Review',
+    label: 'Under Review',
+    badge: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30',
+    activeBg: 'border-purple-500 bg-purple-500/10 text-purple-700 dark:text-purple-300 ring-2 ring-purple-500/40',
+    description: 'Quality assurance, milestone verification, and client review',
+    dot: 'bg-purple-500',
+  },
+  {
+    value: 'Revision Required',
+    label: 'Revision Required',
+    badge: 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/30',
+    activeBg: 'border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-300 ring-2 ring-orange-500/40',
+    description: 'Revisions requested; modifications currently being addressed',
+    dot: 'bg-orange-500',
+  },
+  {
+    value: 'Completed',
+    label: 'Completed',
+    badge: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
+    activeBg: 'border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-2 ring-emerald-500/40',
+    description: 'Project deliverables completed, tested, and handed over',
+    dot: 'bg-emerald-500',
+  },
+  {
+    value: 'Cancelled',
+    label: 'Cancelled',
+    badge: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30',
+    activeBg: 'border-rose-500 bg-rose-500/10 text-rose-700 dark:text-rose-300 ring-2 ring-rose-500/40',
+    description: 'Project cancelled, suspended, or archived',
+    dot: 'bg-rose-500',
+  },
+];
+
+export const ProjectStatusModal = ({
+  isOpen,
+  project,
+  customers = [],
+  onClose,
+  onSuccess,
+}) => {
+  const [status, setStatus] = useState('Pending');
+  const [progress, setProgress] = useState(0);
+  const [customerId, setCustomerId] = useState('');
+  const [message, setMessage] = useState('');
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [deliveryResult, setDeliveryResult] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (project && isOpen) {
+      setStatus(project.status || 'Pending');
+      setProgress(project.progress ?? 0);
+      setCustomerId(project.customerId || '');
+      setMessage('');
+      setIsConfirming(false);
+      setDeliveryResult(null);
+      setError('');
+    }
+  }, [project, isOpen]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isOpen && !saving) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, saving, onClose]);
+
+  if (!isOpen || !project) return null;
+
+  const selectedCustomer =
+    customers.find((c) => c.id === customerId) ||
+    project.customer ||
+    null;
+
+  const isStatusChanging = status.trim().toLowerCase() !== (project.status || '').trim().toLowerCase();
+
+  const handleProceedToConfirmation = (e) => {
+    e.preventDefault();
+    setError('');
+    setIsConfirming(true);
+  };
+
+  const handleConfirmSave = async () => {
+    setSaving(true);
+    setError('');
+
+    try {
+      const res = await projectApi.updateStatus(project.id, {
+        status,
+        progress: Number(progress),
+        customerId: customerId || null,
+        message: message.trim(),
+      });
+
+      if (res.data?.success) {
+        setDeliveryResult(res.data.delivery || { inApp: { success: true }, email: { success: true } });
+        if (onSuccess) {
+          onSuccess(res.data.data, res.data.delivery);
+        }
+      } else {
+        setError(res.data?.message || 'Failed to update project status');
+        setIsConfirming(false);
+      }
+    } catch (err) {
+      console.error('Project status update error:', err);
+      setError(err.response?.data?.message || err.message || 'Failed to update status');
+      setIsConfirming(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-md animate-fade-in"
+      onClick={() => {
+        if (!saving) onClose();
+      }}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 shadow-2xl relative p-6 sm:p-7 space-y-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 dark:border-slate-800/80 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-brand-blue/10 dark:bg-cyan-500/10 text-brand-blue dark:text-cyan-400 flex items-center justify-center border border-brand-blue/20">
+              <Sliders className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-brand-blue dark:text-brand-cyan">
+                Customer Project Management
+              </span>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+                {isConfirming ? 'Confirm Status Update' : 'Update Project Status & Notify Customer'}
+              </h2>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-40 cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Project & Client Identity Card */}
+        <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+          <div>
+            <span className="text-slate-400 text-[10px] uppercase font-mono block">Project Title</span>
+            <span className="font-bold text-slate-900 dark:text-white truncate block">{project.title}</span>
+          </div>
+          <div>
+            <span className="text-slate-400 text-[10px] uppercase font-mono block">Current Status</span>
+            <span className="font-semibold text-brand-blue dark:text-brand-cyan font-mono block">
+              {project.status || 'Pending'} ({project.progress || 0}%)
+            </span>
+          </div>
+          <div>
+            <span className="text-slate-400 text-[10px] uppercase font-mono block">Linked Client</span>
+            <span className="font-semibold text-slate-800 dark:text-slate-200 truncate block">
+              {selectedCustomer?.name || project.clientName || 'No Client Assigned'}
+            </span>
+          </div>
+        </div>
+
+        {error && (
+          <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs flex items-center gap-2.5">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            <span className="font-medium">{error}</span>
+          </div>
+        )}
+
+        {/* Delivery Success Report */}
+        {deliveryResult && (
+          <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-xs space-y-3">
+            <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold">
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Project Status Successfully Updated to {status}!</span>
+            </div>
+
+            <div className="space-y-1.5 pt-1 text-[11px] text-slate-700 dark:text-slate-300">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Bell className="w-3.5 h-3.5 text-brand-blue" />
+                  <span>In-App Customer Notification:</span>
+                </span>
+                <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                  {deliveryResult.inApp?.status === 'DELIVERED' ? '✓ Delivered' : deliveryResult.inApp?.status}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Mail className="w-3.5 h-3.5 text-cyan-500" />
+                  <span>Email Notification ({selectedCustomer?.email || 'N/A'}):</span>
+                </span>
+                <span className="font-mono font-bold text-cyan-600 dark:text-cyan-400">
+                  {deliveryResult.email?.status === 'sent'
+                    ? '✓ Dispatched via SMTP'
+                    : deliveryResult.email?.status === 'blocked_resend_testing_mode'
+                    ? '⚡ Resend Testing Mode (Held)'
+                    : deliveryResult.email?.status === 'simulated'
+                    ? '✓ Simulated'
+                    : deliveryResult.email?.status || 'Sent'}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Smartphone className="w-3.5 h-3.5 text-slate-400" />
+                  <span>SMS Gateway:</span>
+                </span>
+                <span className="font-mono text-slate-400">
+                  {deliveryResult.sms?.status === 'sent'
+                    ? '✓ Dispatched'
+                    : 'Optional Integration (Future Provider)'}
+                </span>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm cursor-pointer"
+              >
+                Close & Return
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Form or Confirmation View */}
+        {!deliveryResult && (
+          <>
+            {!isConfirming ? (
+              <form onSubmit={handleProceedToConfirmation} className="space-y-6">
+                {/* Status Selection Cards */}
+                <div className="space-y-2.5">
+                  <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
+                    Select New Workflow Status <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                    {STATUS_OPTIONS.map((opt) => {
+                      const isSelected = status === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => {
+                            setStatus(opt.value);
+                            if (opt.value === 'Completed' && progress < 100) {
+                              setProgress(100);
+                            } else if (opt.value === 'In Progress' && progress === 0) {
+                              setProgress(25);
+                            }
+                          }}
+                          className={`text-left p-3 rounded-2xl border transition-all relative flex flex-col justify-between gap-1.5 cursor-pointer ${
+                            isSelected
+                              ? opt.activeBg
+                              : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-900/60'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className={`w-2.5 h-2.5 rounded-full ${opt.dot}`} />
+                              <span className="font-bold text-xs">{opt.label}</span>
+                            </div>
+                            {isSelected && (
+                              <div className="w-5 h-5 rounded-full bg-brand-blue text-white flex items-center justify-center flex-shrink-0">
+                                <Check className="w-3 h-3 stroke-[3]" />
+                              </div>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">
+                            {opt.description}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Progress Percentage */}
+                <div className="space-y-2 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  <div className="flex items-center justify-between text-xs">
+                    <label className="font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
+                      Project Completion Progress
+                    </label>
+                    <span className="font-mono font-bold text-brand-blue dark:text-brand-cyan text-sm">
+                      {progress}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="5"
+                    value={progress}
+                    onChange={(e) => setProgress(Number(e.target.value))}
+                    className="w-full accent-brand-blue cursor-pointer"
+                  />
+                  <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                    <span>0% (Initiated)</span>
+                    <span>50% (Milestone 2)</span>
+                    <span>100% (Completed)</span>
+                  </div>
+                </div>
+
+                {/* Linked Customer Dropdown */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
+                    Assign / Link Customer Account
+                  </label>
+                  <select
+                    value={customerId}
+                    onChange={(e) => setCustomerId(e.target.value)}
+                    className="w-full p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-brand-blue"
+                  >
+                    <option value="">No Customer Linked (Unassigned / Internal)</option>
+                    {customers.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} — {c.email} {c.company ? `(${c.company})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    The linked customer will automatically receive in-app and email status notifications.
+                  </p>
+                </div>
+
+                {/* Optional Status Update Message */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
+                      Optional Status Update Message for Customer
+                    </label>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      Included in email & in-app alerts
+                    </span>
+                  </div>
+                  <textarea
+                    rows={3}
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    placeholder="e.g., We have finished the core database models and started frontend UI development for Sprint 2..."
+                    className="w-full p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-brand-blue focus:ring-1 focus:ring-brand-blue transition-colors leading-relaxed"
+                  />
+                </div>
+
+                {/* Action buttons */}
+                <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800/80">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white font-bold text-xs flex items-center gap-2 shadow-md hover:shadow-glow-blue transition-all cursor-pointer"
+                  >
+                    <span>Review & Confirm Update</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </form>
+            ) : (
+              /* Confirmation Modal Step */
+              <div className="space-y-5 animate-fade-in">
+                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <div className="text-xs space-y-1">
+                    <div className="font-bold text-amber-700 dark:text-amber-400">
+                      Confirmation Required Before Dispatch
+                    </div>
+                    <div className="text-slate-700 dark:text-slate-300">
+                      You are about to change the project status and automatically trigger customer notifications.
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2.5 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Target Project:</span>
+                    <span className="font-bold text-slate-900 dark:text-white">{project.title}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Status Transition:</span>
+                    <span className="font-bold">
+                      <span className="text-slate-500">{project.status || 'Pending'}</span>
+                      {' '}&rarr;{' '}
+                      <span className="text-brand-blue dark:text-brand-cyan">{status}</span>
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">New Progress:</span>
+                    <span className="font-mono font-bold">{progress}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Notified Client:</span>
+                    <span className="font-bold text-slate-900 dark:text-white">
+                      {selectedCustomer ? `${selectedCustomer.name} (${selectedCustomer.email})` : 'None (Internal)'}
+                    </span>
+                  </div>
+                  {message && (
+                    <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
+                      <span className="text-slate-400 block mb-1">Update Message to be sent:</span>
+                      <p className="p-2.5 rounded-xl bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 italic text-[11px]">
+                        "{message}"
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                  <button
+                    type="button"
+                    onClick={() => setIsConfirming(false)}
+                    disabled={saving}
+                    className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                  >
+                    &larr; Back to Edit
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleConfirmSave}
+                    disabled={saving}
+                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-700 hover:to-teal-600 text-white font-bold text-xs flex items-center gap-2 shadow-md transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {saving ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Updating & Dispatching...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4 stroke-[2.5]" />
+                        <span>Confirm & Dispatch Notifications</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default ProjectStatusModal;

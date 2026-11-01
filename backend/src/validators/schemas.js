@@ -59,6 +59,8 @@ export const projectSchema = z.object({
   status: z.string().default('Published'),
   demoUrl: z.string().optional().nullable(),
   githubUrl: z.string().optional().nullable(),
+  customerId: z.string().optional().nullable(),
+  progress: z.number().or(z.string()).transform((val) => Number(val) || 0).optional().default(0),
   isFeatured: z.boolean().default(false),
   isPublished: z.boolean().default(true),
 });

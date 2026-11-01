@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { projectApi } from '../../services/api';
+import { projectApi, adminApi } from '../../services/api';
 import {
   Plus,
   Search,
@@ -21,11 +21,26 @@ import {
   Globe,
   Building,
   Loader2,
+  Sliders,
+  Bell,
+  UserCheck,
 } from 'lucide-react';
 import { getImageUrl, validateImageFile } from '../../utils/imageUrl';
+import { ProjectStatusModal } from '../../components/admin/ProjectStatusModal';
+
+export const WORKFLOW_STATUS_BADGES = {
+  Pending: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30',
+  Approved: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30',
+  'In Progress': 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/30',
+  'Under Review': 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30',
+  'Revision Required': 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/30',
+  Completed: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
+  Cancelled: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30',
+};
 
 export const AdminProjectManager = () => {
   const [projects, setProjects] = useState([]);
+  const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
@@ -34,6 +49,7 @@ export const AdminProjectManager = () => {
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
+  const [statusModalProject, setStatusModalProject] = useState(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
@@ -47,13 +63,15 @@ export const AdminProjectManager = () => {
     description: '',
     coverImage: '',
     clientName: '',
+    customerId: '',
+    progress: 0,
     completionDate: '',
     challenges: '',
     solutions: '',
     features: [''],
     technologies: [''],
     screenshots: [],
-    status: 'Published',
+    status: 'Pending',
     demoUrl: '',
     githubUrl: '',
     isFeatured: false,
@@ -69,6 +87,21 @@ export const AdminProjectManager = () => {
   useEffect(() => {
     loadProjects();
   }, [categoryFilter, statusFilter]);
+
+  useEffect(() => {
+    loadCustomers();
+  }, []);
+
+  const loadCustomers = async () => {
+    try {
+      const res = await adminApi.getCustomers();
+      if (res.data?.success && res.data?.data) {
+        setCustomers(res.data.data);
+      }
+    } catch (err) {
+      console.error('Failed to load customers for project assignment', err);
+    }
+  };
 
   const loadProjects = async () => {
     setLoading(true);
@@ -111,13 +144,15 @@ export const AdminProjectManager = () => {
       description: proj.description || '',
       coverImage: proj.coverImage || '',
       clientName: proj.clientName || '',
+      customerId: proj.customerId || '',
+      progress: proj.progress ?? 0,
       completionDate: proj.completionDate ? new Date(proj.completionDate).toISOString().split('T')[0] : '',
       challenges: proj.challenges || '',
       solutions: proj.solutions || '',
       features: proj.features && proj.features.length ? proj.features : [''],
       technologies: proj.technologies && proj.technologies.length ? proj.technologies : [''],
       screenshots: Array.isArray(proj.screenshots) ? proj.screenshots : [],
-      status: proj.status || 'Published',
+      status: proj.status || 'Pending',
       demoUrl: proj.demoUrl || '',
       githubUrl: proj.githubUrl || '',
       isFeatured: Boolean(proj.isFeatured),
@@ -238,6 +273,8 @@ export const AdminProjectManager = () => {
     try {
       const payload = {
         ...formData,
+        customerId: formData.customerId || null,
+        progress: Number(formData.progress ?? 0),
         features: formData.features.filter((f) => f.trim().length > 0),
         technologies: formData.technologies.filter((t) => t.trim().length > 0),
         completionDate: formData.completionDate ? new Date(formData.completionDate).toISOString() : null,
@@ -298,6 +335,9 @@ export const AdminProjectManager = () => {
     return (
       p.title?.toLowerCase().includes(q) ||
       p.clientName?.toLowerCase().includes(q) ||
+      p.customer?.name?.toLowerCase().includes(q) ||
+      p.customer?.email?.toLowerCase().includes(q) ||
+      p.status?.toLowerCase().includes(q) ||
       p.category?.toLowerCase().includes(q) ||
       p.shortDesc?.toLowerCase().includes(q)
     );
@@ -311,13 +351,13 @@ export const AdminProjectManager = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <span>Portfolio Showcase Projects</span>
+            <span>Portfolio & Customer Projects</span>
             <span className="text-xs px-2.5 py-0.5 rounded-full font-mono bg-blue-100 dark:bg-blue-950/80 text-brand-blue dark:text-brand-cyan border border-blue-200 dark:border-blue-800">
               {projects.length} Total
             </span>
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Manage public portfolio case studies, customer showcases, and technical architectural deliverables.
+            Manage public portfolio case studies, customer project lifecycles, and automated client status notifications.
           </p>
         </div>
 
@@ -339,7 +379,7 @@ export const AdminProjectManager = () => {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search projects by title, client, tech..."
+            placeholder="Search projects by title, client, customer, tech..."
             className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-brand-blue"
           />
         </div>
@@ -367,9 +407,15 @@ export const AdminProjectManager = () => {
               className="px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none"
             >
               <option value="All">All Statuses</option>
+              <option value="Pending">Pending</option>
+              <option value="Approved">Approved</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Under Review">Under Review</option>
+              <option value="Revision Required">Revision Required</option>
+              <option value="Completed">Completed</option>
+              <option value="Cancelled">Cancelled</option>
               <option value="Published">Published</option>
               <option value="Draft">Draft</option>
-              <option value="Archived">Archived</option>
             </select>
           </div>
         </div>
@@ -383,9 +429,9 @@ export const AdminProjectManager = () => {
               <tr>
                 <th className="py-3 px-4">Project</th>
                 <th className="py-3 px-4">Category</th>
-                <th className="py-3 px-4">Client</th>
-                <th className="py-3 px-4">Tech Stack</th>
-                <th className="py-3 px-4 text-center">Status</th>
+                <th className="py-3 px-4">Customer / Client</th>
+                <th className="py-3 px-4">Workflow Status & Progress</th>
+                <th className="py-3 px-4 text-center">Visibility</th>
                 <th className="py-3 px-4 text-center">Featured</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
@@ -432,31 +478,52 @@ export const AdminProjectManager = () => {
                         {p.category}
                       </td>
 
-                      {/* Client */}
+                      {/* Customer / Client */}
                       <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400">
-                        {p.clientName || 'Internal Product'}
+                        <div className="font-semibold text-slate-900 dark:text-white">
+                          {p.customer?.name || p.clientName || 'Internal Product'}
+                        </div>
+                        {p.customer?.email ? (
+                          <div className="text-[10px] text-cyan-600 dark:text-cyan-400 font-mono">
+                            {p.customer.email}
+                          </div>
+                        ) : p.clientName ? (
+                          <div className="text-[10px] text-slate-400">External Client</div>
+                        ) : null}
                       </td>
 
-                      {/* Tech stack */}
+                      {/* Workflow Status & Progress */}
                       <td className="py-3.5 px-4">
-                        <div className="flex flex-wrap gap-1 max-w-xs">
-                          {p.technologies?.slice(0, 3).map((t) => (
-                            <span
-                              key={t}
-                              className="px-2 py-0.5 rounded text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 font-mono"
+                        <div className="flex flex-col gap-1.5 min-w-[150px]">
+                          <div className="flex items-center justify-between gap-2">
+                            <button
+                              onClick={() => setStatusModalProject(p)}
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border cursor-pointer hover:opacity-80 transition-opacity ${
+                                WORKFLOW_STATUS_BADGES[p.status] || 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-300 dark:border-slate-700'
+                              }`}
+                              title="Click to update project workflow status & notify customer"
                             >
-                              {t}
-                            </span>
-                          ))}
-                          {p.technologies?.length > 3 && (
-                            <span className="text-[10px] text-slate-400 self-center">
-                              +{p.technologies.length - 3}
-                            </span>
-                          )}
+                              <span className={`w-1.5 h-1.5 rounded-full ${p.status === 'Completed' ? 'bg-emerald-500' : p.status === 'In Progress' ? 'bg-cyan-500 animate-pulse' : 'bg-current'}`} />
+                              <span>{p.status || 'Pending'}</span>
+                            </button>
+                            <span className="text-[11px] font-mono text-slate-500 font-bold">{p.progress ?? 0}%</span>
+                          </div>
+                          <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden border border-slate-200 dark:border-slate-700">
+                            <div
+                              className={`h-full rounded-full transition-all duration-300 ${
+                                p.status === 'Completed'
+                                  ? 'bg-emerald-500'
+                                  : p.status === 'Cancelled'
+                                  ? 'bg-rose-500'
+                                  : 'bg-gradient-to-r from-blue-500 to-cyan-400'
+                              }`}
+                              style={{ width: `${Math.min(100, Math.max(0, p.progress ?? 0))}%` }}
+                            />
+                          </div>
                         </div>
                       </td>
 
-                      {/* Status */}
+                      {/* Visibility */}
                       <td className="py-3.5 px-4 text-center">
                         <button
                           onClick={() => handleTogglePublished(p)}
@@ -468,7 +535,7 @@ export const AdminProjectManager = () => {
                           }`}
                         >
                           {p.isPublished ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
-                          <span>{p.isPublished ? 'Published' : 'Draft'}</span>
+                          <span>{p.isPublished ? 'Live' : 'Draft'}</span>
                         </button>
                       </td>
 
@@ -490,6 +557,14 @@ export const AdminProjectManager = () => {
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => setStatusModalProject(p)}
+                            title="Update Status & Notify Customer"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-500 hover:bg-cyan-50 dark:hover:bg-cyan-950/40 transition-colors cursor-pointer"
+                          >
+                            <Sliders className="w-3.5 h-3.5" />
+                          </button>
+
                           <a
                             href={`/projects/${p.slug}`}
                             target="_blank"
@@ -610,16 +685,22 @@ export const AdminProjectManager = () => {
 
                   <div>
                     <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
-                      Status
+                      Workflow Status
                     </label>
                     <select
                       value={formData.status}
                       onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                       className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-brand-blue"
                     >
+                      <option value="Pending">Pending</option>
+                      <option value="Approved">Approved</option>
+                      <option value="In Progress">In Progress</option>
+                      <option value="Under Review">Under Review</option>
+                      <option value="Revision Required">Revision Required</option>
+                      <option value="Completed">Completed</option>
+                      <option value="Cancelled">Cancelled</option>
                       <option value="Published">Published</option>
                       <option value="Draft">Draft</option>
-                      <option value="Archived">Archived</option>
                     </select>
                   </div>
 
@@ -636,17 +717,59 @@ export const AdminProjectManager = () => {
                   </div>
                 </div>
 
-                {/* Client Name */}
+                {/* Customer Account & Client Display */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1 flex items-center justify-between">
+                      <span>Associated Customer Account</span>
+                      <span className="text-[10px] text-cyan-600 dark:text-cyan-400 font-normal">Enables live updates</span>
+                    </label>
+                    <select
+                      value={formData.customerId || ''}
+                      onChange={(e) => setFormData({ ...formData, customerId: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-brand-blue text-xs"
+                    >
+                      <option value="">None (Public Portfolio showcase only)</option>
+                      {customers.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({c.email}) {c.company ? `— ${c.company}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                      Client Display Name (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.clientName}
+                      onChange={(e) => setFormData({ ...formData, clientName: e.target.value })}
+                      placeholder="e.g. Horizon Academy Trust, UK"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-brand-blue"
+                    />
+                  </div>
+                </div>
+
+                {/* Completion Progress Slider */}
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
-                    Client Name (Optional)
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-slate-700 dark:text-slate-300 font-semibold text-xs">
+                      Project Completion Progress
+                    </label>
+                    <span className="text-xs font-mono font-bold text-cyan-600 dark:text-cyan-400">
+                      {formData.progress || 0}%
+                    </span>
+                  </div>
                   <input
-                    type="text"
-                    value={formData.clientName}
-                    onChange={(e) => setFormData({ ...formData, clientName: e.target.value })}
-                    placeholder="e.g. Horizon Academy Trust, UK"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-brand-blue"
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="5"
+                    value={formData.progress || 0}
+                    onChange={(e) => setFormData({ ...formData, progress: parseInt(e.target.value, 10) })}
+                    className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
                   />
                 </div>
 
@@ -1030,6 +1153,18 @@ export const AdminProjectManager = () => {
           </div>
         </div>
       )}
+
+      {/* Project Status & Customer Notification Modal */}
+      <ProjectStatusModal
+        isOpen={!!statusModalProject}
+        project={statusModalProject}
+        customers={customers}
+        onClose={() => setStatusModalProject(null)}
+        onSuccess={() => {
+          setStatusModalProject(null);
+          loadProjects();
+        }}
+      />
     </div>
   );
 };

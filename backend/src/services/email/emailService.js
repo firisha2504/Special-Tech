@@ -647,3 +647,183 @@ export const sendInquiryNotifications = async (payload = {}) => {
     };
   }
 };
+
+/**
+ * Send customer notification email when their project status changes
+ */
+export const sendProjectStatusEmail = async ({
+  customer,
+  project,
+  previousStatus,
+  newStatus,
+  message,
+  progress = 0,
+}) => {
+  try {
+    if (!customer?.email) {
+      return {
+        success: false,
+        status: 'skipped',
+        error: 'Customer has no valid email address',
+      };
+    }
+
+    const config = await getSMTPConfig();
+    const clientName = customer.name || 'Valued Client';
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5174';
+    const projectUrl = `${frontendUrl}/my-projects?id=${project.id}`;
+
+    // Status colors
+    const statusColorMap = {
+      Approved: '#38bdf8',
+      'In Progress': '#06b6d4',
+      'Under Review': '#a855f7',
+      'Revision Required': '#f97316',
+      Completed: '#10b981',
+      Cancelled: '#ef4444',
+      Pending: '#f59e0b',
+    };
+    const statusColor = statusColorMap[newStatus] || '#3b82f6';
+
+    const statusHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #020D20; color: #f8fafc; margin: 0; padding: 20px; }
+          .container { max-width: 600px; margin: 0 auto; background: #0B192C; border-radius: 16px; overflow: hidden; border: 1px solid #1E293B; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+          .header { background: linear-gradient(135deg, #020D20 0%, #1e3a8a 100%); padding: 32px 24px; text-align: center; border-bottom: 1px solid #1E293B; }
+          .logo { font-size: 22px; font-weight: 800; letter-spacing: 2px; color: #38bdf8; text-transform: uppercase; margin-bottom: 6px; }
+          .badge { display: inline-block; padding: 6px 16px; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #ffffff; background: ${statusColor}; margin-top: 10px; }
+          .content { padding: 32px 24px; }
+          .greeting { font-size: 16px; font-weight: 600; color: #ffffff; margin-bottom: 16px; }
+          .card { background: #030F26; border: 1px solid #1E293B; border-radius: 12px; padding: 20px; margin: 20px 0; }
+          .row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 13px; }
+          .label { color: #94a3b8; }
+          .val { font-weight: 600; color: #f8fafc; text-align: right; }
+          .progress-track { background: #1E293B; height: 8px; border-radius: 4px; overflow: hidden; margin: 12px 0 6px 0; }
+          .progress-bar { background: linear-gradient(90deg, #3b82f6, #06b6d4); height: 100%; border-radius: 4px; width: ${Math.min(100, Math.max(0, progress))}%; }
+          .message-box { background: rgba(56, 189, 248, 0.08); border-left: 3px solid #38bdf8; padding: 14px 18px; border-radius: 0 8px 8px 0; font-size: 13px; color: #e2e8f0; line-height: 1.5; margin: 18px 0; }
+          .cta-btn { display: inline-block; width: 100%; box-sizing: border-box; text-align: center; background: linear-gradient(90deg, #2563eb, #06b6d4); color: #ffffff !important; text-decoration: none; padding: 14px 24px; border-radius: 10px; font-weight: 700; font-size: 14px; margin-top: 20px; }
+          .footer { text-align: center; padding: 20px 24px; font-size: 11px; color: #64748b; border-top: 1px solid #1E293B; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <div class="logo">SPECIAL TECH</div>
+            <div style="font-size: 12px; color: #94a3b8;">Client Project Milestone Notification</div>
+            <div class="badge">${newStatus}</div>
+          </div>
+          <div class="content">
+            <div class="greeting">Dear ${clientName},</div>
+            <p style="font-size: 13px; color: #cbd5e1; line-height: 1.6;">
+              We are pleased to inform you that the status of your project <strong>${project.title}</strong> has been updated to <strong>${newStatus}</strong>.
+            </p>
+
+            <div class="card">
+              <div class="row">
+                <span class="label">Project Title:</span>
+                <span class="val">${project.title}</span>
+              </div>
+              <div class="row">
+                <span class="label">Previous Status:</span>
+                <span class="val" style="color: #94a3b8;">${previousStatus || 'Initiated'}</span>
+              </div>
+              <div class="row">
+                <span class="label">New Status:</span>
+                <span class="val" style="color: ${statusColor}; font-weight: bold;">${newStatus}</span>
+              </div>
+              <div class="row">
+                <span class="label">Project Progress:</span>
+                <span class="val">${progress}%</span>
+              </div>
+              <div class="progress-track">
+                <div class="progress-bar"></div>
+              </div>
+            </div>
+
+            ${
+              message
+                ? `
+              <div class="message-box">
+                <div style="font-size: 11px; font-weight: bold; color: #38bdf8; text-transform: uppercase; margin-bottom: 4px;">Update Message from Engineering Team:</div>
+                ${message}
+              </div>
+            `
+                : ''
+            }
+
+            ${
+              newStatus === 'Completed'
+                ? `
+              <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 14px; text-align: center; color: #10b981; font-weight: 600; font-size: 13px; margin: 16px 0;">
+                🎉 Congratulations! Your project deliverables have been finalized and completed.
+              </div>
+            `
+                : ''
+            }
+
+            <a href="${projectUrl}" class="cta-btn">View Live Project in Customer Portal &rarr;</a>
+          </div>
+          <div class="footer">
+            Special Tech • Enterprise AI & Full-Stack Solutions<br>
+            If you have questions regarding this milestone, please reply directly or contact support@specialtech.com.
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    if (!config.isConfigured) {
+      console.log(`[Email Notice] SMTP not configured. Project status email simulated for project "${project.title}" to ${customer.email}.`);
+      return {
+        success: true,
+        status: 'simulated',
+        message: 'SMTP not configured; simulated successfully',
+      };
+    }
+
+    const transporter = createTransporter(config);
+    try {
+      const info = await transporter.sendMail({
+        from: config.from,
+        to: customer.email,
+        subject: `[Special Tech] Project Update: ${project.title} is now ${newStatus}`,
+        html: statusHtml,
+      });
+
+      console.log(`[Email Notice] Project status email sent to ${customer.email} (${info.messageId})`);
+      return {
+        success: true,
+        status: 'sent',
+        messageId: info.messageId,
+      };
+    } catch (sendErr) {
+      const errMsg = sendErr.message || '';
+      if (sendErr.responseCode === 550 || /550|only send testing emails|testing email address/i.test(errMsg)) {
+        console.warn(`[Email Notice] Customer email for project "${project.title}" held: Resend account in testing mode (${customer.email}).`);
+        return {
+          success: true,
+          status: 'blocked_resend_testing_mode',
+          error: errMsg,
+        };
+      }
+      console.warn(`[Email Warning] Project status email failed for ${customer.email}:`, errMsg);
+      return {
+        success: false,
+        status: 'failed',
+        error: errMsg,
+      };
+    }
+  } catch (err) {
+    console.error('[Email Service Error in sendProjectStatusEmail]:', err.message);
+    return {
+      success: false,
+      status: 'error',
+      error: err.message,
+    };
+  }
+};
+

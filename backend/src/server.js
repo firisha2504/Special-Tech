@@ -14,6 +14,7 @@ import inquiryRoutes from './routes/inquiryRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import productRoutes from './routes/productRoutes.js';
 import demoRequestRoutes from './routes/demoRequestRoutes.js';
+import customerRoutes from './routes/customerRoutes.js';
 
 dotenv.config();
 
@@ -86,6 +87,7 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/prototypes', prototypeRoutes);
 app.use('/api/inquiries', inquiryRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/customer', customerRoutes);
 
 // Error Handling
 app.use(notFoundHandler);
