@@ -77,6 +77,16 @@ const STATUS_OPTIONS = [
   },
 ];
 
+const maskEmail = (email) => {
+  if (!email || typeof email !== 'string' || !email.includes('@')) return email || 'N/A';
+  const [user, domain] = email.split('@');
+  if (user.length <= 2) return `${user[0]}*@${domain}`;
+  const visiblePrefix = user.slice(0, 1);
+  const visibleSuffix = user.slice(-1);
+  const stars = '*'.repeat(Math.min(user.length - 2, 4));
+  return `${visiblePrefix}${stars}${visibleSuffix}@${domain}`;
+};
+
 export const ProjectStatusModal = ({
   isOpen,
   project,
@@ -91,6 +101,8 @@ export const ProjectStatusModal = ({
   const [isConfirming, setIsConfirming] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deliveryResult, setDeliveryResult] = useState(null);
+  const [retryingEmail, setRetryingEmail] = useState(false);
+  const [retryFeedback, setRetryFeedback] = useState(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -101,6 +113,8 @@ export const ProjectStatusModal = ({
       setMessage('');
       setIsConfirming(false);
       setDeliveryResult(null);
+      setRetryingEmail(false);
+      setRetryFeedback(null);
       setError('');
     }
   }, [project, isOpen]);
@@ -133,6 +147,7 @@ export const ProjectStatusModal = ({
   const handleConfirmSave = async () => {
     setSaving(true);
     setError('');
+    setRetryFeedback(null);
 
     try {
       const res = await projectApi.updateStatus(project.id, {
@@ -157,6 +172,56 @@ export const ProjectStatusModal = ({
       setIsConfirming(false);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleRetryEmail = async () => {
+    if (retryingEmail || !project?.id) return;
+    setRetryingEmail(true);
+    setRetryFeedback(null);
+
+    try {
+      const res = await projectApi.retryEmail(project.id, {
+        message: message.trim(),
+        force: false,
+      });
+
+      if (res.data?.success) {
+        setDeliveryResult((prev) => ({
+          ...prev,
+          email: res.data.delivery,
+        }));
+        setRetryFeedback({
+          type: 'success',
+          message: res.data.message || 'Email successfully delivered and accepted by email provider!',
+        });
+        if (onSuccess) onSuccess();
+      } else {
+        setDeliveryResult((prev) => ({
+          ...prev,
+          email: res.data.delivery || { ...prev?.email, success: false, error: res.data?.message },
+        }));
+        setRetryFeedback({
+          type: res.data?.alreadyDelivered ? 'warning' : 'error',
+          message: res.data?.message || 'Email delivery retry failed.',
+        });
+      }
+    } catch (err) {
+      console.error('Email retry error:', err);
+      const errMsg = err.response?.data?.message || err.message || 'Failed to retry email delivery';
+      const isAlreadyDelivered = err.response?.status === 409 || err.response?.data?.alreadyDelivered;
+      setRetryFeedback({
+        type: isAlreadyDelivered ? 'warning' : 'error',
+        message: errMsg,
+      });
+      if (isAlreadyDelivered && err.response?.data?.delivery) {
+        setDeliveryResult((prev) => ({
+          ...prev,
+          email: err.response.data.delivery,
+        }));
+      }
+    } finally {
+      setRetryingEmail(false);
     }
   };
 
@@ -226,59 +291,136 @@ export const ProjectStatusModal = ({
           </div>
         )}
 
-        {/* Delivery Success Report */}
+        {/* Delivery Report */}
         {deliveryResult && (
-          <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-xs space-y-3">
-            <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold">
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Project Status Successfully Updated to {status}!</span>
+          <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-slate-900 dark:text-white font-bold text-sm">
+                <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                <span>Project Status Updated: {status}</span>
+              </div>
+              <span className="font-mono text-[10px] text-slate-400">
+                {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
             </div>
 
-            <div className="space-y-1.5 pt-1 text-[11px] text-slate-700 dark:text-slate-300">
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1.5">
-                  <Bell className="w-3.5 h-3.5 text-brand-blue" />
-                  <span>In-App Customer Notification:</span>
-                </span>
-                <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                  {deliveryResult.inApp?.status === 'DELIVERED' ? '✓ Delivered' : deliveryResult.inApp?.status}
+            {/* In-App Notification Status */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center">
+                  <Bell className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200 block">In-App Customer Notification</span>
+                  <span className="text-[10px] text-slate-400">Delivered directly to client portal</span>
+                </div>
+              </div>
+              <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                {deliveryResult.inApp?.status === 'DELIVERED' ? '✓ Delivered' : deliveryResult.inApp?.status || '✓ Delivered'}
+              </span>
+            </div>
+
+            {/* Email Notification Status */}
+            <div className="p-3.5 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                    deliveryResult.email?.success
+                      ? 'bg-emerald-500/10 text-emerald-500'
+                      : 'bg-rose-500/10 text-rose-500'
+                  }`}>
+                    <Mail className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200 block">
+                      Customer Email Notification
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      Recipient: {deliveryResult.email?.maskedRecipient || maskEmail(deliveryResult.email?.recipient || selectedCustomer?.email)}
+                    </span>
+                  </div>
+                </div>
+
+                <span className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-bold border flex-shrink-0 ${
+                  deliveryResult.email?.success
+                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                    : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
+                }`}>
+                  {deliveryResult.email?.success
+                    ? '✓ Accepted by Provider'
+                    : '✗ Delivery Failed'}
                 </span>
               </div>
 
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1.5">
-                  <Mail className="w-3.5 h-3.5 text-cyan-500" />
-                  <span>Email Notification ({selectedCustomer?.email || 'N/A'}):</span>
-                </span>
-                <span className="font-mono font-bold text-cyan-600 dark:text-cyan-400">
-                  {deliveryResult.email?.status === 'sent'
-                    ? '✓ Dispatched via SMTP'
-                    : deliveryResult.email?.status === 'blocked_resend_testing_mode'
-                    ? '⚡ Resend Testing Mode (Held)'
-                    : deliveryResult.email?.status === 'simulated'
-                    ? '✓ Simulated'
-                    : deliveryResult.email?.status || 'Sent'}
-                </span>
-              </div>
+              {/* Provider Acceptance Details */}
+              {deliveryResult.email?.success ? (
+                <div className="p-2.5 rounded-lg bg-emerald-500/5 border border-emerald-500/15 text-[11px] text-emerald-700 dark:text-emerald-300 space-y-1">
+                  <div className="flex items-center gap-1.5 font-medium">
+                    <Check className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                    <span>Provider confirmed message acceptance for immediate delivery.</span>
+                  </div>
+                  {deliveryResult.email?.messageId && (
+                    <div className="font-mono text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                      Provider Message ID: {deliveryResult.email.messageId}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-[11px] text-rose-600 dark:text-rose-400 space-y-1">
+                    <div className="flex items-start gap-1.5 font-medium">
+                      <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                      <span>{deliveryResult.email?.error || 'Provider rejected email dispatch.'}</span>
+                    </div>
+                    {deliveryResult.email?.error?.includes('Testing Mode') && (
+                      <p className="text-[10px] text-slate-600 dark:text-slate-300 mt-1.5 pl-5 leading-relaxed bg-black/5 dark:bg-white/5 p-2 rounded-md">
+                        <strong>Provider Requirement:</strong> Your Resend account is currently in Testing Mode. While in testing mode, Resend allows outbound delivery only to the verified account owner email. To automatically send emails to arbitrary external customer domains, verify a sending domain in your Resend dashboard (<a href="https://resend.com/domains" target="_blank" rel="noopener noreferrer" className="underline text-brand-blue dark:text-brand-cyan">resend.com/domains</a>).
+                      </p>
+                    )}
+                  </div>
 
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1.5">
-                  <Smartphone className="w-3.5 h-3.5 text-slate-400" />
-                  <span>SMS Gateway:</span>
-                </span>
-                <span className="font-mono text-slate-400">
-                  {deliveryResult.sms?.status === 'sent'
-                    ? '✓ Dispatched'
-                    : 'Optional Integration (Future Provider)'}
-                </span>
-              </div>
+                  {/* Retry Action */}
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[10px] text-slate-500">
+                      Need to re-dispatch email to the customer?
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleRetryEmail}
+                      disabled={retryingEmail}
+                      className="px-3.5 py-1.5 rounded-xl bg-brand-blue hover:bg-blue-600 text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 shadow-sm"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${retryingEmail ? 'animate-spin' : ''}`} />
+                      <span>{retryingEmail ? 'Retrying Delivery...' : 'Retry Email Delivery'}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Retry feedback toast if triggered */}
+              {retryFeedback && (
+                <div className={`p-2.5 rounded-lg text-[11px] flex items-center gap-2 border animate-fade-in ${
+                  retryFeedback.type === 'success'
+                    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                    : retryFeedback.type === 'warning'
+                    ? 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400'
+                    : 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400'
+                }`}>
+                  {retryFeedback.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                  )}
+                  <span>{retryFeedback.message}</span>
+                </div>
+              )}
             </div>
 
             <div className="pt-2 flex justify-end">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm cursor-pointer"
+                className="px-6 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 font-bold text-xs shadow-sm transition-all cursor-pointer"
               >
                 Close & Return
               </button>
@@ -457,7 +599,7 @@ export const ProjectStatusModal = ({
                   <div className="flex justify-between">
                     <span className="text-slate-400">Notified Client:</span>
                     <span className="font-bold text-slate-900 dark:text-white">
-                      {selectedCustomer ? `${selectedCustomer.name} (${selectedCustomer.email})` : 'None (Internal)'}
+                      {selectedCustomer ? `${selectedCustomer.name} (${maskEmail(selectedCustomer.email)})` : 'None (Internal)'}
                     </span>
                   </div>
                   {message && (

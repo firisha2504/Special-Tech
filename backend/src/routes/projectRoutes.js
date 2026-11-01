@@ -10,6 +10,7 @@ import {
   deleteProject,
   uploadProjectImage,
   getProjectStatusHistory,
+  retryProjectEmailNotification,
 } from '../controllers/projectController.js';
 import { authenticateToken, requireRole, requirePermission } from '../middleware/auth.js';
 import { upload } from '../middleware/upload.js';
@@ -29,6 +30,7 @@ router.get('/admin/detail/:id', getProjectById);
 router.post('/', createProject);
 router.put('/:id', updateProject);
 router.patch('/:id/status', updateProjectStatus);
+router.post('/:id/retry-email', retryProjectEmailNotification);
 router.delete('/:id', deleteProject);
 router.post('/upload', upload.single('image'), uploadProjectImage);
 

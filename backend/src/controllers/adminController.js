@@ -266,7 +266,7 @@ export const getNotifications = async (req, res, next) => {
     const { filter = 'all', limit = 50, page = 1 } = req.query;
 
     const where = {
-      OR: [{ userId }, { userId: null }],
+      OR: [{ userId }, { userId: null, customerId: null }],
     };
 
     if (filter === 'unread') {
@@ -287,7 +287,7 @@ export const getNotifications = async (req, res, next) => {
       }),
       prisma.notification.count({
         where: {
-          OR: [{ userId }, { userId: null }],
+          OR: [{ userId }, { userId: null, customerId: null }],
           isRead: false,
         },
       }),

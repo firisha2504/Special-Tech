@@ -41,9 +41,14 @@ export const getSMTPConfig = async () => {
     const rawPort = portSetting !== null ? portSetting.value : process.env.SMTP_PORT;
     const user = userSetting !== null ? userSetting.value : (process.env.SMTP_USER || '');
     const pass = passSetting !== null ? passSetting.value : (process.env.SMTP_PASS || process.env.RESEND_API_KEY || '');
-    const from = fromSetting !== null ? fromSetting.value : (process.env.SMTP_FROM || 'Special Tech <contact@specialtech.com>');
+    let from = fromSetting !== null ? fromSetting.value : (process.env.SMTP_FROM || 'Special Tech <onboarding@resend.dev>');
     const adminEmail = adminEmailSetting?.value || companyContactSetting?.value || process.env.ADMIN_NOTIFICATION_EMAIL || 'admin@specialtech.com';
     const resendTestRecipient = resendTestRecipientSetting?.value || process.env.RESEND_TEST_RECIPIENT || 'naniabdi2504@gmail.com';
+
+    // If using Resend and the sender is set to unverified specialtech.com, fallback to verified onboarding@resend.dev
+    if (host && host.includes('resend.com') && from.includes('@specialtech.com')) {
+      from = process.env.SMTP_FROM || 'Special Tech <onboarding@resend.dev>';
+    }
 
     let port = Number(rawPort);
     if (!port || isNaN(port)) {
@@ -102,6 +107,19 @@ export const getSMTPConfig = async () => {
       lastDeliveryStatus: null,
     };
   }
+};
+
+/**
+ * Privacy-conscious email masking helper (e.g. n***4@gmail.com)
+ */
+export const maskEmail = (email) => {
+  if (!email || typeof email !== 'string') return 'N/A';
+  const parts = email.trim().split('@');
+  if (parts.length !== 2) return email;
+  const [local, domain] = parts;
+  const maskedLocal =
+    local.length <= 2 ? local[0] + '***' : local[0] + '***' + local[local.length - 1];
+  return `${maskedLocal}@${domain}`;
 };
 
 /**
@@ -685,6 +703,12 @@ export const sendProjectStatusEmail = async ({
     };
     const statusColor = statusColorMap[newStatus] || '#3b82f6';
 
+    const updateDate = new Date().toLocaleString('en-US', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      timeZone: 'UTC',
+    }) + ' UTC';
+
     const statusHtml = `
       <!DOCTYPE html>
       <html>
@@ -739,6 +763,10 @@ export const sendProjectStatusEmail = async ({
                 <span class="label">Project Progress:</span>
                 <span class="val">${progress}%</span>
               </div>
+              <div class="row">
+                <span class="label">Date & Time:</span>
+                <span class="val" style="color: #94a3b8;">${updateDate}</span>
+              </div>
               <div class="progress-track">
                 <div class="progress-bar"></div>
               </div>
@@ -776,53 +804,93 @@ export const sendProjectStatusEmail = async ({
       </html>
     `;
 
-    if (!config.isConfigured) {
-      console.log(`[Email Notice] SMTP not configured. Project status email simulated for project "${project.title}" to ${customer.email}.`);
+    if (!customer?.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email.trim())) {
       return {
-        success: true,
-        status: 'simulated',
-        message: 'SMTP not configured; simulated successfully',
+        success: false,
+        status: 'Failed',
+        provider: 'Resend SMTP',
+        error: 'Project owner has no registered or valid customer email address.',
+        recipient: customer?.email || null,
+        maskedRecipient: maskEmail(customer?.email || ''),
       };
     }
 
-    const transporter = createTransporter(config);
+    if (!config.isConfigured) {
+      console.warn(`[Email Warning] SMTP not configured. Project status email cannot be sent for project "${project.title}" to ${customer.email}.`);
+      return {
+        success: false,
+        status: 'Failed',
+        provider: 'Resend SMTP',
+        error: 'SMTP host, user, or password is not configured in .env or Admin Settings.',
+        recipient: customer.email.trim(),
+        maskedRecipient: maskEmail(customer.email.trim()),
+      };
+    }
+
+    const transporter = await createSMTPTransporter();
+    if (!transporter) {
+      console.warn(`[Email Warning] Could not initialize SMTP transporter for project status email.`);
+      return {
+        success: false,
+        status: 'Failed',
+        provider: 'Resend SMTP',
+        error: 'Could not initialize SMTP transporter with current configuration',
+        recipient: customer.email.trim(),
+        maskedRecipient: maskEmail(customer.email.trim()),
+      };
+    }
+
     try {
+      const recipientEmail = customer.email.trim();
       const info = await transporter.sendMail({
         from: config.from,
-        to: customer.email,
+        to: recipientEmail,
         subject: `[Special Tech] Project Update: ${project.title} is now ${newStatus}`,
         html: statusHtml,
       });
 
-      console.log(`[Email Notice] Project status email sent to ${customer.email} (${info.messageId})`);
+      console.log(`[Email Notice] Project status email accepted by provider for ${recipientEmail} (${info.messageId})`);
       return {
         success: true,
-        status: 'sent',
+        status: 'Sent',
+        provider: 'Resend SMTP',
         messageId: info.messageId,
+        recipient: recipientEmail,
+        maskedRecipient: maskEmail(recipientEmail),
       };
     } catch (sendErr) {
       const errMsg = sendErr.message || '';
+      let cleanError = errMsg;
+
       if (sendErr.responseCode === 550 || /550|only send testing emails|testing email address/i.test(errMsg)) {
-        console.warn(`[Email Notice] Customer email for project "${project.title}" held: Resend account in testing mode (${customer.email}).`);
-        return {
-          success: true,
-          status: 'blocked_resend_testing_mode',
-          error: errMsg,
-        };
+        cleanError = `Resend Testing Mode (550): Account is currently in testing mode and can only deliver to the verified account email (${config.adminEmail || 'naniabdi2504@gmail.com'}). To send to external customer domains, verify your domain at https://resend.com/domains.`;
+        console.warn(`[Email Notice] Customer email for project "${project.title}" rejected: ${cleanError}`);
+      } else if (sendErr.responseCode === 535 || /535|authentication credentials invalid/i.test(errMsg)) {
+        cleanError = 'SMTP Authentication Failure (535): Invalid Resend credentials. Please verify your SMTP_PASS / API Key.';
+      } else if (/timeout|ETIMEDOUT|ECONNREFUSED/i.test(errMsg)) {
+        cleanError = `SMTP Server Unreachable: Connection timed out attempting to reach ${config.host}:${config.port}.`;
       }
-      console.warn(`[Email Warning] Project status email failed for ${customer.email}:`, errMsg);
+
+      console.warn(`[Email Warning] Project status email failed for ${customer.email}:`, cleanError);
       return {
         success: false,
-        status: 'failed',
-        error: errMsg,
+        status: 'Failed',
+        provider: 'Resend SMTP',
+        error: cleanError,
+        rawError: errMsg,
+        recipient: customer.email.trim(),
+        maskedRecipient: maskEmail(customer.email.trim()),
       };
     }
   } catch (err) {
     console.error('[Email Service Error in sendProjectStatusEmail]:', err.message);
     return {
       success: false,
-      status: 'error',
+      status: 'Failed',
+      provider: 'Resend SMTP',
       error: err.message,
+      recipient: customer?.email || null,
+      maskedRecipient: maskEmail(customer?.email || ''),
     };
   }
 };

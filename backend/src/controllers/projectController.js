@@ -1,6 +1,7 @@
 import prisma from '../config/db.js';
 import { projectSchema } from '../validators/schemas.js';
 import { notifyProjectStatusChange } from '../services/notification/notificationService.js';
+import { sendProjectStatusEmail, maskEmail } from '../services/email/emailService.js';
 
 export const getAllProjects = async (req, res, next) => {
   try {
@@ -394,3 +395,146 @@ export const uploadProjectImage = async (req, res, next) => {
     next(err);
   }
 };
+
+export const retryProjectEmailNotification = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { message, force = false } = req.body || {};
+
+    const project = await prisma.project.findUnique({
+      where: { id },
+      include: { customer: true },
+    });
+
+    if (!project) {
+      return res.status(404).json({ success: false, message: 'Project not found' });
+    }
+
+    if (!project.customer) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot send email: No registered customer is linked to this project.',
+      });
+    }
+
+    if (!project.customer.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(project.customer.email.trim())) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot send email: Customer "${project.customer.name}" does not have a valid registered email address.`,
+      });
+    }
+
+    // Check duplicate prevention: Has an email already been successfully accepted for this status?
+    if (!force) {
+      const existingSuccess = await prisma.notification.findFirst({
+        where: {
+          projectId: project.id,
+          channel: 'EMAIL',
+          deliveryStatus: 'SENT',
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (
+        existingSuccess &&
+        existingSuccess.deliveryDetails?.newStatus?.toLowerCase() === (project.status || '').toLowerCase()
+      ) {
+        return res.status(409).json({
+          success: false,
+          alreadyDelivered: true,
+          message: `Email notification for status "${project.status}" was already accepted by email provider (Message ID: ${existingSuccess.deliveryDetails?.providerMessageId || 'Confirmed'}). Duplicate delivery prevented.`,
+          delivery: {
+            success: true,
+            status: 'Already Sent',
+            messageId: existingSuccess.deliveryDetails?.providerMessageId,
+            maskedRecipient: existingSuccess.deliveryDetails?.maskedRecipientEmail || maskEmail(project.customer.email),
+          },
+        });
+      }
+    }
+
+    // Retrieve latest status update message if not provided in body
+    let updateMessage = message;
+    if (updateMessage === undefined) {
+      const latestHistory = await prisma.projectStatusHistory.findFirst({
+        where: { projectId: project.id },
+        orderBy: { createdAt: 'desc' },
+      });
+      updateMessage = latestHistory?.message || '';
+    }
+
+    // Send email to customer
+    const emailRes = await sendProjectStatusEmail({
+      customer: project.customer,
+      project,
+      previousStatus: null,
+      newStatus: project.status,
+      message: updateMessage || '',
+      progress: project.progress,
+    });
+
+    const emailDeliveryStatus = emailRes.success ? 'SENT' : 'FAILED';
+
+    // Record notification attempt in the database
+    const notifRecord = await prisma.notification.create({
+      data: {
+        customerId: project.customer.id,
+        projectId: project.id,
+        title: `Email Notification Retry: ${project.status}`,
+        message: emailRes.success
+          ? `Retry email accepted by provider for ${emailRes.maskedRecipient || project.customer.email}.`
+          : `Retry email delivery failed for ${emailRes.maskedRecipient || project.customer.email}: ${emailRes.error}`,
+        type: 'project_status_change',
+        channel: 'EMAIL',
+        deliveryStatus: emailDeliveryStatus,
+        deliveryDetails: {
+          customerId: project.customer.id,
+          projectId: project.id,
+          recipientEmail: project.customer.email,
+          maskedRecipientEmail: emailRes.maskedRecipient || maskEmail(project.customer.email),
+          notificationType: 'project_status_change_retry',
+          previousStatus: null,
+          newStatus: project.status,
+          deliveryStatus: emailDeliveryStatus,
+          provider: emailRes.provider || 'Resend SMTP',
+          providerMessageId: emailRes.messageId || null,
+          errorMessage: emailRes.error || null,
+          isRetry: true,
+          attemptAt: new Date().toISOString(),
+        },
+        link: `/my-projects?id=${project.id}`,
+        isRead: true,
+      },
+    });
+
+    await prisma.activityLog.create({
+      data: {
+        userId: req.user?.id,
+        action: 'PROJECT_EMAIL_RETRY',
+        entityType: 'PROJECT',
+        entityId: project.id,
+        details: {
+          status: project.status,
+          success: emailRes.success,
+          recipient: emailRes.maskedRecipient || maskEmail(project.customer.email),
+          providerMessageId: emailRes.messageId || null,
+          error: emailRes.error || null,
+        },
+      },
+    });
+
+    return res.json({
+      success: emailRes.success,
+      message: emailRes.success
+        ? `Customer email successfully accepted by provider for ${emailRes.maskedRecipient || maskEmail(project.customer.email)}`
+        : `Email delivery failed: ${emailRes.error}`,
+      delivery: {
+        ...emailRes,
+        notificationId: notifRecord.id,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+

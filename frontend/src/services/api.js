@@ -28,6 +28,7 @@ export const projectApi = {
   create: (data) => api.post('/projects', data),
   update: (id, data) => api.put(`/projects/${id}`, data),
   updateStatus: (id, data) => api.patch(`/projects/${id}/status`, data),
+  retryEmail: (id, data) => api.post(`/projects/${id}/retry-email`, data),
   getHistory: (id) => api.get(`/projects/${id}/history`),
   delete: (id) => api.delete(`/projects/${id}`),
   uploadImage: (formData) =>

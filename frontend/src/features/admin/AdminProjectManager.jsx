@@ -1161,7 +1161,6 @@ export const AdminProjectManager = () => {
         customers={customers}
         onClose={() => setStatusModalProject(null)}
         onSuccess={() => {
-          setStatusModalProject(null);
           loadProjects();
         }}
       />

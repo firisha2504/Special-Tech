@@ -176,26 +176,29 @@ export const InquiryStatusModal = ({ inquiry, isOpen, onClose, onSuccess }) => {
         </div>
 
         {/* Inquiry Summary Banner */}
-        <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800/80 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-          <div>
+        <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800/80 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs items-start">
+          <div className="min-w-0">
             <span className="text-slate-400 text-[10px] uppercase font-mono block">Inquiry Number</span>
-            <span className="font-mono font-bold text-brand-blue dark:text-brand-cyan">{inquiry.inquiryNumber}</span>
+            <span className="font-mono font-bold text-brand-blue dark:text-brand-cyan truncate block">{inquiry.inquiryNumber}</span>
           </div>
-          <div>
+          <div className="min-w-0">
             <span className="text-slate-400 text-[10px] uppercase font-mono block">Customer</span>
             <span className="font-semibold text-slate-800 dark:text-slate-200 truncate block">
               {inquiry.customer?.name || 'Customer'}
             </span>
           </div>
-          <div>
+          <div className="min-w-0">
             <span className="text-slate-400 text-[10px] uppercase font-mono block">Email</span>
-            <span className="text-slate-600 dark:text-slate-400 font-mono text-[11px] truncate block">
+            <span
+              className="text-slate-600 dark:text-slate-400 font-mono text-[11px] break-all block"
+              title={inquiry.customer?.email || 'N/A'}
+            >
               {inquiry.customer?.email || 'N/A'}
             </span>
           </div>
-          <div>
+          <div className="min-w-0">
             <span className="text-slate-400 text-[10px] uppercase font-mono block">Budget</span>
-            <span className="text-emerald-600 dark:text-emerald-400 font-mono font-bold">
+            <span className="text-emerald-600 dark:text-emerald-400 font-mono font-bold block">
               {inquiry.budget || 'Unspecified'}
             </span>
           </div>

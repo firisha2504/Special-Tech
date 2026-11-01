@@ -198,11 +198,16 @@ export const getCustomerProjectById = async (req, res, next) => {
 export const getCustomerNotifications = async (req, res, next) => {
   try {
     const customerId = req.customer.id;
-    const { filter = 'all' } = req.query;
+    const { filter = 'all', channel = 'IN_APP' } = req.query;
 
     const where = { customerId };
+    if (channel && channel !== 'ALL') {
+      where.channel = channel;
+    }
     if (filter === 'unread') where.isRead = false;
     if (filter === 'read') where.isRead = true;
+
+    const channelFilter = channel && channel !== 'ALL' ? { channel } : {};
 
     const [notifications, unreadCount, totalCount] = await Promise.all([
       prisma.notification.findMany({
@@ -215,10 +220,10 @@ export const getCustomerNotifications = async (req, res, next) => {
         },
       }),
       prisma.notification.count({
-        where: { customerId, isRead: false },
+        where: { customerId, isRead: false, ...channelFilter },
       }),
       prisma.notification.count({
-        where: { customerId },
+        where: { customerId, ...channelFilter },
       }),
     ]);
 

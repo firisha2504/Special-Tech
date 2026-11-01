@@ -1,5 +1,5 @@
 import prisma from '../../config/db.js';
-import { sendProjectStatusEmail } from '../email/emailService.js';
+import { sendProjectStatusEmail, maskEmail } from '../email/emailService.js';
 import { sendSMSNotification } from '../sms/smsService.js';
 
 /**
@@ -265,7 +265,57 @@ export const notifyProjectStatusChange = async ({
   }
 
   // 2. Email Notification
-  if (customer?.email) {
+  if (!customer) {
+    deliveryReport.email = {
+      success: false,
+      status: 'Failed',
+      provider: 'Resend SMTP',
+      error: 'Project has no registered customer associated with it.',
+      recipient: null,
+      maskedRecipient: null,
+    };
+  } else if (!customer.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email.trim())) {
+    const errorMsg = 'Customer has no valid registered email address.';
+    deliveryReport.email = {
+      success: false,
+      status: 'Failed',
+      provider: 'Resend SMTP',
+      error: errorMsg,
+      recipient: customer.email || null,
+      maskedRecipient: customer.email ? maskEmail(customer.email) : null,
+    };
+
+    if (customer.id) {
+      await prisma.notification.create({
+        data: {
+          customerId: customer.id,
+          projectId: project.id,
+          title: `Email Notification: ${newStatus} (Failed)`,
+          message: `Email delivery to customer failed: ${errorMsg}`,
+          type: 'project_status_change',
+          channel: 'EMAIL',
+          deliveryStatus: 'FAILED',
+          deliveryDetails: {
+            customerId: customer.id,
+            projectId: project.id,
+            recipientEmail: customer.email || null,
+            maskedRecipientEmail: customer.email ? maskEmail(customer.email) : null,
+            notificationType: 'project_status_change',
+            previousStatus: previousStatus || 'Initiated',
+            newStatus,
+            deliveryStatus: 'FAILED',
+            provider: 'Resend SMTP',
+            providerMessageId: null,
+            errorMessage: errorMsg,
+            attemptAt: new Date().toISOString(),
+          },
+          link: `/my-projects?id=${project.id}`,
+          isRead: true,
+        },
+      });
+    }
+  } else {
+    // Customer has a valid email
     const emailRes = await sendProjectStatusEmail({
       customer,
       project,
@@ -277,6 +327,45 @@ export const notifyProjectStatusChange = async ({
 
     deliveryReport.email = emailRes;
 
+    const emailDeliveryStatus = emailRes.success ? 'SENT' : 'FAILED';
+    const emailNotifRecord = await prisma.notification.create({
+      data: {
+        customerId: customer.id,
+        projectId: project.id,
+        title: `Email Notification: ${newStatus}`,
+        message: emailRes.success
+          ? `Status update email delivered to provider for ${emailRes.maskedRecipient || customer.email}.`
+          : `Status update email delivery failed for ${emailRes.maskedRecipient || customer.email}: ${emailRes.error}`,
+        type: 'project_status_change',
+        channel: 'EMAIL',
+        deliveryStatus: emailDeliveryStatus,
+        deliveryDetails: {
+          customerId: customer.id,
+          projectId: project.id,
+          recipientEmail: customer.email,
+          maskedRecipientEmail: emailRes.maskedRecipient || maskEmail(customer.email),
+          notificationType: 'project_status_change',
+          previousStatus: previousStatus || 'Initiated',
+          newStatus,
+          deliveryStatus: emailDeliveryStatus,
+          provider: emailRes.provider || 'Resend SMTP',
+          providerMessageId: emailRes.messageId || null,
+          errorMessage: emailRes.error || null,
+          attemptAt: new Date().toISOString(),
+        },
+        link: `/my-projects?id=${project.id}`,
+        metadata: {
+          projectId: project.id,
+          previousStatus,
+          newStatus,
+          message: message || '',
+        },
+        isRead: true,
+      },
+    });
+
+    deliveryReport.email.notificationId = emailNotifRecord.id;
+
     // Attach email delivery telemetry to the in-app notification record
     if (notif?.id) {
       await prisma.notification.update({
@@ -286,9 +375,12 @@ export const notifyProjectStatusChange = async ({
             inApp: 'DELIVERED',
             email: {
               recipient: customer.email,
-              status: emailRes.status,
+              maskedRecipient: emailRes.maskedRecipient || maskEmail(customer.email),
+              status: emailDeliveryStatus,
               messageId: emailRes.messageId || null,
               error: emailRes.error || null,
+              attemptAt: new Date().toISOString(),
+              notificationId: emailNotifRecord.id,
             },
           },
         },

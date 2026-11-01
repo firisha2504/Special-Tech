@@ -1452,22 +1452,36 @@ export const AdminDashboardPage = () => {
             </div>
 
             {/* Customer Details */}
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-              <div>
-                <span className="text-slate-500 dark:text-slate-400 block">Customer Name:</span>
-                <span className="font-bold text-slate-900 dark:text-white">{selectedInquiry.customer?.name}</span>
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs items-start">
+              <div className="min-w-0">
+                <span className="text-slate-500 dark:text-slate-400 block mb-0.5">Customer Name:</span>
+                <span className="font-bold text-slate-900 dark:text-white break-words block">
+                  {selectedInquiry.customer?.name || 'N/A'}
+                </span>
               </div>
-              <div>
-                <span className="text-slate-500 dark:text-slate-400 block">Email Address:</span>
-                <span className="text-brand-blue dark:text-brand-cyan font-mono font-semibold">{selectedInquiry.customer?.email}</span>
+              <div className="min-w-0">
+                <span className="text-slate-500 dark:text-slate-400 block mb-0.5">Email Address:</span>
+                <span
+                  className="text-brand-blue dark:text-brand-cyan font-mono font-semibold break-all block"
+                  title={selectedInquiry.customer?.email}
+                >
+                  {selectedInquiry.customer?.email || 'N/A'}
+                </span>
               </div>
-              <div>
-                <span className="text-slate-500 dark:text-slate-400 block">Company:</span>
-                <span className="text-slate-900 dark:text-white font-medium">{selectedInquiry.customer?.company || 'N/A'}</span>
+              <div className="min-w-0">
+                <span className="text-slate-500 dark:text-slate-400 block mb-0.5">Company:</span>
+                <span
+                  className="text-slate-900 dark:text-white font-medium break-words block"
+                  title={selectedInquiry.customer?.company || 'N/A'}
+                >
+                  {selectedInquiry.customer?.company || 'N/A'}
+                </span>
               </div>
-              <div>
-                <span className="text-slate-500 dark:text-slate-400 block">Budget:</span>
-                <span className="text-emerald-600 dark:text-emerald-400 font-mono font-bold">{selectedInquiry.budget || 'Unspecified'}</span>
+              <div className="min-w-0">
+                <span className="text-slate-500 dark:text-slate-400 block mb-0.5">Budget:</span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-mono font-bold block">
+                  {selectedInquiry.budget || 'Unspecified'}
+                </span>
               </div>
             </div>
 
@@ -1619,18 +1633,27 @@ export const AdminDashboardPage = () => {
               </p>
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-              <div>
-                <span className="text-slate-500 dark:text-slate-400 block">Customer Name:</span>
-                <span className="font-bold text-slate-900 dark:text-white">{selectedConversation.customer?.name || 'Anonymous Visitor'}</span>
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs items-start">
+              <div className="min-w-0">
+                <span className="text-slate-500 dark:text-slate-400 block mb-0.5">Customer Name:</span>
+                <span className="font-bold text-slate-900 dark:text-white break-words block">
+                  {selectedConversation.customer?.name || 'Anonymous Visitor'}
+                </span>
               </div>
-              <div>
-                <span className="text-slate-500 dark:text-slate-400 block">Customer Email:</span>
-                <span className="text-brand-blue dark:text-brand-cyan font-mono font-semibold">{selectedConversation.customer?.email || 'N/A'}</span>
+              <div className="min-w-0">
+                <span className="text-slate-500 dark:text-slate-400 block mb-0.5">Customer Email:</span>
+                <span
+                  className="text-brand-blue dark:text-brand-cyan font-mono font-semibold break-all block"
+                  title={selectedConversation.customer?.email || 'N/A'}
+                >
+                  {selectedConversation.customer?.email || 'N/A'}
+                </span>
               </div>
-              <div>
-                <span className="text-slate-500 dark:text-slate-400 block">Prototypes Created:</span>
-                <span className="font-bold text-slate-900 dark:text-white">{selectedConversation.prototypes?.length || 0}</span>
+              <div className="min-w-0">
+                <span className="text-slate-500 dark:text-slate-400 block mb-0.5">Prototypes Created:</span>
+                <span className="font-bold text-slate-900 dark:text-white block">
+                  {selectedConversation.prototypes?.length || 0}
+                </span>
               </div>
             </div>
 
