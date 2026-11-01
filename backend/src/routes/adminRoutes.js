@@ -8,6 +8,9 @@ import {
   getActivityLogs,
   getNotifications,
   markNotificationRead,
+  markAllNotificationsRead,
+  deleteNotification,
+  clearReadNotifications,
   testAIProviderConnection,
   getAdminConversations,
   getAdminConversationById,
@@ -75,8 +78,13 @@ router.get('/customers', requirePermission('manage_customers'), getCustomers);
 router.get('/settings', requirePermission('manage_system_settings'), getSettings);
 router.post('/settings', requirePermission('manage_system_settings'), updateSetting);
 router.get('/activity-logs', requirePermission('view_audit_logs'), getActivityLogs);
+// Notification Management Endpoints
 router.get('/notifications', getNotifications);
+router.patch('/notifications/read-all', markAllNotificationsRead);
+router.post('/notifications/read-all', markAllNotificationsRead);
+router.delete('/notifications/clear-read', clearReadNotifications);
 router.patch('/notifications/:id/read', markNotificationRead);
+router.delete('/notifications/:id', deleteNotification);
 
 // AI Engine Management & Discovery Auditing
 router.post('/ai/test', requirePermission('manage_ai_settings'), testAIProviderConnection);

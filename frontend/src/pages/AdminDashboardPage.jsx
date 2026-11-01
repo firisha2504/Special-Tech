@@ -33,13 +33,15 @@ import {
   Mail,
   Send,
   Server,
-  ShieldCheck,
+  Sliders,
+  FileText,
 } from 'lucide-react';
 import Logo from '../components/common/Logo';
 import AdminLayout from '../layouts/AdminLayout';
 import AdminProjectManager from '../features/admin/AdminProjectManager';
 import AdminProductManager from '../features/admin/AdminProductManager';
 import AdminPermissionManager from '../features/admin/AdminPermissionManager';
+import InquiryStatusModal from '../components/admin/InquiryStatusModal';
 
 const ADMIN_TABS = [
   { id: 'overview', name: 'Overview', icon: LayoutDashboard },
@@ -103,7 +105,52 @@ export const AdminDashboardPage = () => {
   const [settings, setSettings] = useState([]);
   const [activityLogs, setActivityLogs] = useState([]);
   const [selectedInquiry, setSelectedInquiry] = useState(null);
+  const [updatingInquiry, setUpdatingInquiry] = useState(null);
+  const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  // Auto-dismiss toast notification
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => {
+        setToast(null);
+      }, 4500);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  const getStatusBadge = (st) => {
+    switch (st) {
+      case 'NEW':
+        return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30';
+      case 'UNDER_REVIEW':
+        return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30';
+      case 'ESTIMATED':
+        return 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30';
+      case 'IN_PROGRESS':
+        return 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/30';
+      case 'COMPLETED':
+        return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30';
+      case 'CANCELLED':
+        return 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30';
+      default:
+        return 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700';
+    }
+  };
+
+  const handleInquiryStatusUpdated = (updated) => {
+    setInquiries((prev) =>
+      prev.map((inq) => (inq.id === updated.id ? { ...inq, ...updated } : inq))
+    );
+    if (selectedInquiry?.id === updated.id) {
+      setSelectedInquiry((prev) => ({ ...prev, ...updated }));
+    }
+    setToast({
+      type: 'success',
+      title: 'Status Updated',
+      message: `Inquiry #${updated.inquiryNumber || updated.id} status is now ${updated.status}.`,
+    });
+  };
 
   // AI Settings & Diagnostic state
   const [aiProvider, setAiProvider] = useState('built-in');
@@ -216,7 +263,11 @@ export const AdminDashboardPage = () => {
         setSelectedConversation(res.data.data);
       }
     } catch (err) {
-      alert('Failed to load conversation: ' + (err.response?.data?.message || err.message));
+      setToast({
+        type: 'error',
+        title: 'Conversation Error',
+        message: 'Failed to load conversation: ' + (err.response?.data?.message || err.message),
+      });
     } finally {
       setLoadingConv(false);
     }
@@ -241,17 +292,26 @@ export const AdminDashboardPage = () => {
         status,
         internalNotes: notes,
       });
-      if (res.data.success) {
+      if (res.data?.success) {
+        const updated = res.data.data || { status, internalNotes: notes };
         setInquiries((prev) =>
-          prev.map((inq) => (inq.id === id ? { ...inq, status, internalNotes: notes } : inq))
+          prev.map((inq) => (inq.id === id ? { ...inq, ...updated } : inq))
         );
         if (selectedInquiry?.id === id) {
-          setSelectedInquiry((prev) => ({ ...prev, status, internalNotes: notes }));
+          setSelectedInquiry((prev) => ({ ...prev, ...updated }));
         }
-        alert('Inquiry status updated successfully.');
+        setToast({
+          type: 'success',
+          title: 'Status Updated',
+          message: 'Inquiry status updated successfully.',
+        });
       }
     } catch (err) {
-      alert('Failed to update status.');
+      setToast({
+        type: 'error',
+        title: 'Update Failed',
+        message: err.response?.data?.message || err.message || 'Failed to update status.',
+      });
     }
   };
 
@@ -284,12 +344,20 @@ export const AdminDashboardPage = () => {
         await adminApi.updateSetting({ key: keyName, value: geminiKey.trim() });
         setGeminiKey('');
       }
-      alert('AI Configuration saved successfully to database!');
+      setToast({
+        type: 'success',
+        title: 'AI Config Saved',
+        message: 'AI Configuration saved successfully to database!',
+      });
       const s = await aiApi.getStatus().catch(() => ({}));
       if (s.data?.success) setLiveAiStatus(s.data);
       loadDashboardData();
     } catch (err) {
-      alert('Failed to save AI settings');
+      setToast({
+        type: 'error',
+        title: 'Save Failed',
+        message: 'Failed to save AI settings: ' + (err.response?.data?.message || err.message),
+      });
     }
   };
 
@@ -304,12 +372,20 @@ export const AdminDashboardPage = () => {
         await adminApi.updateSetting({ key: 'smtp_pass', value: smtpPass.trim() });
         setSmtpPass('');
       }
-      alert('SMTP Email Configuration saved successfully!');
+      setToast({
+        type: 'success',
+        title: 'SMTP Saved',
+        message: 'SMTP Email Configuration saved successfully!',
+      });
       const stat = await adminApi.getEmailStatus().catch(() => ({}));
       if (stat.data?.success) setSmtpStatusData(stat.data.data);
       loadDashboardData();
     } catch (err) {
-      alert('Failed to save SMTP settings: ' + (err.response?.data?.message || err.message));
+      setToast({
+        type: 'error',
+        title: 'Save Failed',
+        message: 'Failed to save SMTP settings: ' + (err.response?.data?.message || err.message),
+      });
     }
   };
 
@@ -598,21 +674,30 @@ export const AdminDashboardPage = () => {
                         <td className="py-3.5 px-4 font-medium text-slate-700 dark:text-slate-200">{inq.title}</td>
                         <td className="py-3.5 px-4 font-mono text-emerald-600 dark:text-emerald-400 font-semibold">{inq.budget || 'N/A'}</td>
                         <td className="py-3.5 px-4">
-                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border ${getStatusBadge(inq.status)}`}>
+                            <span className="w-1.5 h-1.5 rounded-full bg-current opacity-80" />
                             {inq.status}
                           </span>
                         </td>
                         <td className="py-3.5 px-4 flex items-center gap-2">
                           <button
                             onClick={() => handleOpenInquiry(inq)}
-                            className="px-3 py-1 rounded-lg bg-brand-blue/10 dark:bg-brand-blue/20 text-brand-blue dark:text-brand-cyan hover:bg-brand-blue hover:text-white font-semibold transition-colors"
+                            className="px-2.5 py-1 rounded-lg bg-brand-blue/10 dark:bg-brand-blue/20 text-brand-blue dark:text-brand-cyan hover:bg-brand-blue hover:text-white font-semibold transition-colors cursor-pointer"
                           >
                             Details
                           </button>
                           <button
+                            onClick={() => setUpdatingInquiry(inq)}
+                            className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500 hover:text-white font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                            title="Update Status & Notes"
+                          >
+                            <Sliders className="w-3.5 h-3.5" />
+                            <span>Status</span>
+                          </button>
+                          <button
                             onClick={() => window.open(inquiryApi.getPdfUrl(inq.id), '_blank')}
                             title="Download Spec PDF"
-                            className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-transparent"
+                            className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-transparent cursor-pointer"
                           >
                             <Download className="w-3.5 h-3.5" />
                           </button>
@@ -1441,24 +1526,57 @@ export const AdminDashboardPage = () => {
               </div>
             )}
 
-            {/* Status & Actions */}
-            <div className="space-y-3 pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
-              <span className="font-semibold text-slate-700 dark:text-slate-300">Update Inquiry Status:</span>
-              <div className="flex flex-wrap gap-2">
-                {['NEW', 'UNDER_REVIEW', 'ESTIMATED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'].map((st) => (
-                  <button
-                    key={st}
-                    onClick={() => handleUpdateInquiryStatus(selectedInquiry.id, st, selectedInquiry.internalNotes)}
-                    className={`px-3 py-1.5 rounded-lg font-bold text-[10px] transition-all ${
-                      selectedInquiry.status === st
-                        ? 'bg-brand-blue text-white shadow-md'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-transparent'
-                    }`}
-                  >
-                    {st}
-                  </button>
-                ))}
+            {/* Status & Internal Notes Section */}
+            <div className="space-y-3 pt-4 border-t border-slate-200 dark:border-slate-800 text-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 dark:bg-slate-900/80 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+                <div className="space-y-1">
+                  <span className="text-[10px] uppercase font-mono text-slate-400 block">Workflow Status & Priority</span>
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${getStatusBadge(selectedInquiry.status)}`}>
+                      <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                      {selectedInquiry.status}
+                    </span>
+                    {selectedInquiry.priority && (
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                        {selectedInquiry.priority} Priority
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setUpdatingInquiry(selectedInquiry)}
+                  className="px-4 py-2 rounded-xl bg-brand-blue hover:bg-blue-600 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+                >
+                  <Sliders className="w-3.5 h-3.5" />
+                  <span>Update Status & Notes</span>
+                </button>
               </div>
+
+              {/* Internal Notes Display */}
+              {selectedInquiry.internalNotes ? (
+                <div className="p-4 rounded-2xl bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/20 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400 font-semibold text-xs">
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Internal Administrative Notes:</span>
+                  </div>
+                  <p className="text-slate-700 dark:text-slate-300 whitespace-pre-line text-[11px] leading-relaxed">
+                    {selectedInquiry.internalNotes}
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-dashed border-slate-200 dark:border-slate-800 text-slate-400 text-[11px] flex items-center justify-between">
+                  <span>No internal administrative notes recorded yet.</span>
+                  <button
+                    type="button"
+                    onClick={() => setUpdatingInquiry(selectedInquiry)}
+                    className="text-brand-blue dark:text-brand-cyan hover:underline font-semibold cursor-pointer"
+                  >
+                    + Add Notes
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="pt-4 flex items-center justify-between border-t border-slate-200 dark:border-slate-800">
@@ -1540,11 +1658,55 @@ export const AdminDashboardPage = () => {
               <button
                 type="button"
                 onClick={() => setSelectedConversation(null)}
-                className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs"
+                className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs cursor-pointer"
               >
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* INQUIRY STATUS & NOTES MODAL */}
+      <InquiryStatusModal
+        isOpen={Boolean(updatingInquiry)}
+        inquiry={updatingInquiry}
+        onClose={() => setUpdatingInquiry(null)}
+        onSuccess={handleInquiryStatusUpdated}
+      />
+
+      {/* Global In-App Notification Toast */}
+      {toast && (
+        <div className="fixed top-20 right-4 sm:right-8 z-50 max-w-md animate-fade-in shadow-2xl">
+          <div
+            className={`flex items-start gap-3 p-4 rounded-2xl border backdrop-blur-md transition-all ${
+              toast.type === 'error'
+                ? 'bg-rose-950/90 border-rose-500/40 text-rose-200'
+                : toast.type === 'info'
+                ? 'bg-slate-900/90 border-blue-500/40 text-blue-200'
+                : 'bg-emerald-950/90 border-emerald-500/40 text-emerald-200'
+            }`}
+          >
+            {toast.type === 'error' ? (
+              <AlertCircle className="w-5 h-5 text-rose-400 flex-shrink-0 mt-0.5" />
+            ) : toast.type === 'info' ? (
+              <Inbox className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
+            ) : (
+              <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+            )}
+            <div className="flex-1 text-xs">
+              <div className="font-bold text-white text-sm">
+                {toast.title || (toast.type === 'error' ? 'Action Failed' : 'Success')}
+              </div>
+              <div className="mt-0.5 leading-relaxed">{toast.message}</div>
+            </div>
+            <button
+              onClick={() => setToast(null)}
+              className="p-1 rounded-lg hover:bg-white/10 text-white/70 hover:text-white transition-colors cursor-pointer"
+              aria-label="Dismiss toast"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
         </div>
       )}

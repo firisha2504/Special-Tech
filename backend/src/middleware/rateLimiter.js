@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 export const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 300,
+  skip: () => process.env.NODE_ENV === 'test',
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -20,6 +21,7 @@ export const globalLimiter = rateLimit({
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 15,
+  skip: () => process.env.NODE_ENV === 'test',
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -34,6 +36,7 @@ export const authLimiter = rateLimit({
 export const aiLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
   max: 60,
+  skip: () => process.env.NODE_ENV === 'test',
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -41,3 +44,4 @@ export const aiLimiter = rateLimit({
     message: 'AI request limit reached. Please wait a moment before sending more messages.',
   },
 });
+

@@ -20,7 +20,9 @@ import {
   Code,
   Globe,
   Building,
+  Loader2,
 } from 'lucide-react';
+import { getImageUrl, validateImageFile } from '../../utils/imageUrl';
 
 export const AdminProjectManager = () => {
   const [projects, setProjects] = useState([]);
@@ -58,7 +60,11 @@ export const AdminProjectManager = () => {
     isPublished: true,
   };
   const [formData, setFormData] = useState(defaultForm);
-  const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [uploadingScreenshot, setUploadingScreenshot] = useState(false);
+  const [coverPreview, setCoverPreview] = useState('');
+  const [coverUploadError, setCoverUploadError] = useState('');
+  const [screenshotUploadError, setScreenshotUploadError] = useState('');
 
   useEffect(() => {
     loadProjects();
@@ -85,26 +91,32 @@ export const AdminProjectManager = () => {
   const handleOpenCreateModal = () => {
     setEditingProject(null);
     setFormData(defaultForm);
+    setCoverPreview('');
+    setCoverUploadError('');
+    setScreenshotUploadError('');
     setFormError('');
     setIsModalOpen(true);
   };
 
   const handleOpenEditModal = (proj) => {
     setEditingProject(proj);
+    setCoverPreview('');
+    setCoverUploadError('');
+    setScreenshotUploadError('');
     setFormData({
       title: proj.title || '',
       slug: proj.slug || '',
       category: proj.category || 'Web Applications',
       shortDesc: proj.shortDesc || '',
       description: proj.description || '',
-      coverImage: proj.coverImage || proj.screenshots?.[0] || '',
+      coverImage: proj.coverImage || '',
       clientName: proj.clientName || '',
       completionDate: proj.completionDate ? new Date(proj.completionDate).toISOString().split('T')[0] : '',
       challenges: proj.challenges || '',
       solutions: proj.solutions || '',
       features: proj.features && proj.features.length ? proj.features : [''],
       technologies: proj.technologies && proj.technologies.length ? proj.technologies : [''],
-      screenshots: proj.screenshots || [],
+      screenshots: Array.isArray(proj.screenshots) ? proj.screenshots : [],
       status: proj.status || 'Published',
       demoUrl: proj.demoUrl || '',
       githubUrl: proj.githubUrl || '',
@@ -129,50 +141,84 @@ export const AdminProjectManager = () => {
     });
   };
 
-  // Image Upload handler for cover image
+  // Image Upload handler for cover image (JPEG, PNG, WebP)
   const handleCoverUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setCoverUploadError('');
+    const validation = validateImageFile(file);
+    if (!validation.valid) {
+      setCoverUploadError(validation.error);
+      e.target.value = '';
+      return;
+    }
+
+    // Display immediate local preview
+    const localPreviewUrl = URL.createObjectURL(file);
+    setCoverPreview(localPreviewUrl);
+    setUploadingCover(true);
+
     const data = new FormData();
     data.append('image', file);
-    setUploadingImage(true);
 
     try {
       const res = await projectApi.uploadImage(data);
-      if (res.data.success) {
+      if (res.data.success && res.data.data?.url) {
+        const uploadedPath = res.data.data.url;
         setFormData((prev) => ({
           ...prev,
-          coverImage: res.data.data.url,
-          screenshots: prev.screenshots.includes(res.data.data.url)
-            ? prev.screenshots
-            : [res.data.data.url, ...prev.screenshots],
+          coverImage: uploadedPath,
         }));
       }
     } catch (err) {
-      alert('Failed to upload image. Please ensure it is a valid JPG/PNG/WebP under 10MB.');
+      setCoverUploadError(
+        err.response?.data?.message || 'Failed to upload cover image. Please ensure it is a valid JPG/PNG/WebP under 10MB.'
+      );
+      setCoverPreview('');
     } finally {
-      setUploadingImage(false);
+      setUploadingCover(false);
+      e.target.value = '';
     }
   };
 
-  // Add multiple screenshots
+  // Upload independent screenshot(s)
   const handleScreenshotUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
 
-    const data = new FormData();
-    data.append('image', file);
+    setScreenshotUploadError('');
+    setUploadingScreenshot(true);
+
     try {
-      const res = await projectApi.uploadImage(data);
-      if (res.data.success) {
-        setFormData((prev) => ({
-          ...prev,
-          screenshots: [...prev.screenshots, res.data.data.url],
-        }));
+      for (const file of files) {
+        const validation = validateImageFile(file);
+        if (!validation.valid) {
+          setScreenshotUploadError(validation.error);
+          continue;
+        }
+
+        const data = new FormData();
+        data.append('image', file);
+
+        const res = await projectApi.uploadImage(data);
+        if (res.data.success && res.data.data?.url) {
+          const uploadedUrl = res.data.data.url;
+          setFormData((prev) => ({
+            ...prev,
+            screenshots: prev.screenshots.includes(uploadedUrl)
+              ? prev.screenshots
+              : [...prev.screenshots, uploadedUrl],
+          }));
+        }
       }
     } catch (err) {
-      alert('Failed to upload screenshot.');
+      setScreenshotUploadError(
+        err.response?.data?.message || 'Failed to upload screenshot. Please ensure it is a valid JPG/PNG/WebP under 10MB.'
+      );
+    } finally {
+      setUploadingScreenshot(false);
+      e.target.value = '';
     }
   };
 
@@ -359,7 +405,8 @@ export const AdminProjectManager = () => {
                 </tr>
               ) : (
                 filteredProjects.map((p) => {
-                  const cover = p.coverImage || p.screenshots?.[0] || 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=300&q=80';
+                  const rawCover = p.coverImage || p.screenshots?.[0] || 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=300&q=80';
+                  const cover = getImageUrl(rawCover, 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=300&q=80');
                   return (
                     <tr key={p.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
                       {/* Project info */}
@@ -368,6 +415,9 @@ export const AdminProjectManager = () => {
                           <img
                             src={cover}
                             alt={p.title}
+                            onError={(e) => {
+                              e.currentTarget.src = 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=300&q=80';
+                            }}
                             className="w-12 h-10 rounded-lg object-cover border border-slate-200 dark:border-slate-700 flex-shrink-0"
                           />
                           <div className="min-w-0">
@@ -631,57 +681,176 @@ export const AdminProjectManager = () => {
                 </div>
 
                 {/* Cover Image Upload */}
-                <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
-                    Project Cover Image URL or Upload
-                  </label>
-                  <div className="flex gap-2">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-slate-700 dark:text-slate-300 font-semibold">
+                      Project Cover Image
+                    </label>
+                    {formData.coverImage && (
+                      <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-mono">
+                        Path: {formData.coverImage.startsWith('/uploads/') ? formData.coverImage : 'Custom URL'}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <input
                       type="text"
                       value={formData.coverImage}
-                      onChange={(e) => setFormData({ ...formData, coverImage: e.target.value })}
-                      placeholder="https://... or upload file"
-                      className="flex-1 px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-brand-blue"
+                      onChange={(e) => {
+                        setFormData({ ...formData, coverImage: e.target.value });
+                        setCoverPreview('');
+                      }}
+                      placeholder="e.g. /uploads/... or https://..."
+                      className="flex-1 px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-mono text-xs focus:outline-none focus:border-brand-blue"
                     />
-                    <label className="px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-semibold flex items-center gap-1.5 cursor-pointer">
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>{uploadingImage ? 'Uploading...' : 'Upload'}</span>
-                      <input type="file" accept="image/*" onChange={handleCoverUpload} className="hidden" />
+                    <label
+                      className={`px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                        uploadingCover
+                          ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                          : 'bg-brand-blue/10 dark:bg-brand-blue/20 hover:bg-brand-blue/20 text-brand-blue dark:text-brand-cyan'
+                      }`}
+                    >
+                      {uploadingCover ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Uploading...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>{formData.coverImage ? 'Replace Image' : 'Upload from Computer'}</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/jpg"
+                        disabled={uploadingCover}
+                        onChange={handleCoverUpload}
+                        className="hidden"
+                      />
                     </label>
                   </div>
-                  {formData.coverImage && (
-                    <div className="mt-2 relative w-32 h-20 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
-                      <img src={formData.coverImage} alt="Cover Preview" className="w-full h-full object-cover" />
+
+                  {coverUploadError && (
+                    <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">
+                      {coverUploadError}
+                    </p>
+                  )}
+
+                  {/* Cover Image Preview */}
+                  {(coverPreview || formData.coverImage) && (
+                    <div className="mt-2 relative p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="relative w-28 h-18 rounded-xl overflow-hidden border border-slate-300 dark:border-slate-700 bg-slate-200 dark:bg-slate-800 flex-shrink-0">
+                          <img
+                            src={getImageUrl(coverPreview || formData.coverImage)}
+                            alt="Cover Preview"
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              console.warn('Cover preview failed to load:', e.target.src);
+                            }}
+                          />
+                          {uploadingCover && (
+                            <div className="absolute inset-0 bg-slate-900/60 flex items-center justify-center">
+                              <Loader2 className="w-5 h-5 text-white animate-spin" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0 text-xs">
+                          <div className="font-semibold text-slate-800 dark:text-slate-200 truncate">
+                            {coverPreview ? 'Selected Local Preview' : 'Active Cover Image'}
+                          </div>
+                          <div className="text-[11px] text-slate-400 font-mono truncate max-w-sm mt-0.5">
+                            {formData.coverImage || 'Uploading...'}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData((prev) => ({ ...prev, coverImage: '' }));
+                          setCoverPreview('');
+                          setCoverUploadError('');
+                        }}
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 transition-colors cursor-pointer"
+                      >
+                        Remove Image
+                      </button>
                     </div>
                   )}
                 </div>
 
                 {/* Screenshots Gallery */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
                     <label className="block text-slate-700 dark:text-slate-300 font-semibold">
                       Project Screenshots Gallery ({formData.screenshots.length})
                     </label>
-                    <label className="text-brand-blue dark:text-brand-cyan hover:underline cursor-pointer flex items-center gap-1">
-                      <Plus className="w-3 h-3" />
-                      <span>Upload Screenshot</span>
-                      <input type="file" accept="image/*" onChange={handleScreenshotUpload} className="hidden" />
+                    <label
+                      className={`text-xs font-semibold px-3 py-1.5 rounded-xl border border-dashed border-brand-blue/50 dark:border-brand-cyan/50 text-brand-blue dark:text-brand-cyan hover:bg-brand-blue/10 dark:hover:bg-brand-blue/20 cursor-pointer flex items-center gap-1.5 transition-colors ${
+                        uploadingScreenshot ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      {uploadingScreenshot ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Uploading...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Upload Screenshots</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/jpeg,image/png,image/webp,image/jpg"
+                        disabled={uploadingScreenshot}
+                        onChange={handleScreenshotUpload}
+                        className="hidden"
+                      />
                     </label>
                   </div>
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    {formData.screenshots.map((s, idx) => (
-                      <div key={idx} className="relative w-24 h-16 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 group">
-                        <img src={s} alt={`Screenshot ${idx + 1}`} className="w-full h-full object-cover" />
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveScreenshot(idx)}
-                          className="absolute top-1 right-1 p-1 rounded-full bg-rose-600 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+
+                  {screenshotUploadError && (
+                    <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">
+                      {screenshotUploadError}
+                    </p>
+                  )}
+
+                  {formData.screenshots.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+                      {formData.screenshots.map((s, idx) => (
+                        <div
+                          key={idx}
+                          className="relative group rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 aspect-video bg-slate-100 dark:bg-slate-800"
                         >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
+                          <img
+                            src={getImageUrl(s)}
+                            alt={`Screenshot ${idx + 1}`}
+                            className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-200"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-2">
+                            <span className="text-[10px] text-white/90 font-mono">#{idx + 1}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveScreenshot(idx)}
+                              title="Remove Screenshot"
+                              className="p-1 rounded-full bg-rose-600 hover:bg-rose-700 text-white shadow-md transition-transform hover:scale-110 cursor-pointer"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center text-slate-400 text-xs">
+                      No screenshots uploaded yet. Select JPEG, PNG, or WebP images to build the gallery.
+                    </div>
+                  )}
                 </div>
 
                 {/* Technologies */}

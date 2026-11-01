@@ -2,6 +2,7 @@ import prisma from '../config/db.js';
 import { customerInquirySchema } from '../validators/schemas.js';
 import { generateSpecificationPDF } from '../services/pdf/pdfService.js';
 import { sendInquiryNotifications } from '../services/email/emailService.js';
+import { notifyNewInquiry } from '../services/notification/notificationService.js';
 
 export const submitInquiry = async (req, res, next) => {
   try {
@@ -80,15 +81,8 @@ export const submitInquiry = async (req, res, next) => {
       },
     });
 
-    // 4. Create Notification for Admin
-    await prisma.notification.create({
-      data: {
-        title: 'New Customer Project Submission',
-        message: `Inquiry ${inquiry.inquiryNumber} received from ${customer.name} (${customer.company || 'Individual'}).`,
-        type: 'inquiry',
-        link: `/admin/inquiries/${inquiry.id}`,
-      },
-    });
+    // 4. Create Notification for Admin (Dispatches to active admins with deduplication)
+    await notifyNewInquiry(inquiry, customer);
 
     // 5. Send Email Notifications
     await sendInquiryNotifications({ customer, inquiry, requirement: inquiry.requirement });

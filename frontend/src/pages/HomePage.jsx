@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { serviceApi, projectApi } from '../services/api';
+import { getImageUrl } from '../utils/imageUrl';
 import {
   Sparkles,
   ArrowRight,
@@ -487,8 +488,11 @@ export const HomePage = () => {
                 <div>
                   <div className="h-48 overflow-hidden relative">
                     <img
-                      src={proj.screenshots?.[0] || 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80'}
+                      src={getImageUrl(proj.coverImage || proj.screenshots?.[0], 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80')}
                       alt={proj.title}
+                      onError={(e) => {
+                        e.currentTarget.src = 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80';
+                      }}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                     <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-900/80 text-brand-cyan backdrop-blur-md border border-brand-cyan/30">

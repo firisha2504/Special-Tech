@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
 
 import authRoutes from './routes/authRoutes.js';
@@ -46,8 +47,23 @@ app.use(
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Static uploads directory
-app.use('/uploads', express.static(path.resolve('uploads')));
+// Static uploads directory with reliable absolute path and security options
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const backendRoot = path.resolve(__dirname, '..');
+const uploadDir = process.env.UPLOAD_DIR
+  ? path.resolve(backendRoot, process.env.UPLOAD_DIR)
+  : path.resolve(backendRoot, 'uploads');
+
+app.use(
+  '/uploads',
+  express.static(uploadDir, {
+    dotfiles: 'ignore',
+    etag: true,
+    index: false,
+    maxAge: '1d',
+  })
+);
 
 // Health Check
 app.get('/api/health', (req, res) => {

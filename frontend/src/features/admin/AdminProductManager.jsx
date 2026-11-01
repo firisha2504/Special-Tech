@@ -26,6 +26,7 @@ import {
   MessageSquare,
   HelpCircle,
 } from 'lucide-react';
+import { getImageUrl } from '../../utils/imageUrl';
 
 export const AdminProductManager = () => {
   const [activeSubTab, setActiveSubTab] = useState('products'); // 'products' | 'demo-requests'
@@ -529,8 +530,11 @@ export const AdminProductManager = () => {
                           <td className="py-3.5 px-4">
                             <div className="flex items-center gap-3">
                               <img
-                                src={cover}
+                                src={getImageUrl(cover, 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=300&q=80')}
                                 alt={p.name}
+                                onError={(e) => {
+                                  e.currentTarget.src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=300&q=80';
+                                }}
                                 className="w-12 h-10 rounded-lg object-cover border border-slate-200 dark:border-slate-700 flex-shrink-0"
                               />
                               <div className="min-w-0">
@@ -975,7 +979,7 @@ export const AdminProductManager = () => {
                       <div className="flex flex-wrap gap-2 pt-1">
                         {formData.screenshots.map((s, idx) => (
                           <div key={idx} className="relative w-24 h-16 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 group">
-                            <img src={s} alt={`Screenshot ${idx + 1}`} className="w-full h-full object-cover" />
+                            <img src={getImageUrl(s)} alt={`Screenshot ${idx + 1}`} className="w-full h-full object-cover" />
                             <button
                               type="button"
                               onClick={() => handleRemoveScreenshot(idx)}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { productApi } from '../services/api';
+import { getImageUrl } from '../utils/imageUrl';
 import DemoRequestModal from '../components/common/DemoRequestModal';
 import {
   Search,
@@ -154,12 +155,14 @@ export const ProductsPage = () => {
                   {/* Product Visual Header */}
                   <div className="h-52 overflow-hidden relative bg-slate-950">
                     <img
-                      src={
-                        prod.coverImage ||
-                        prod.screenshots?.[0] ||
+                      src={getImageUrl(
+                        prod.coverImage || prod.screenshots?.[0],
                         'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=800&q=80'
-                      }
+                      )}
                       alt={prod.name}
+                      onError={(e) => {
+                        e.currentTarget.src = 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=800&q=80';
+                      }}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-90 group-hover:opacity-100"
                     />
 

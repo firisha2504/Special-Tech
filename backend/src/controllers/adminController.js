@@ -262,12 +262,44 @@ export const getActivityLogs = async (req, res, next) => {
 
 export const getNotifications = async (req, res, next) => {
   try {
-    const notifications = await prisma.notification.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 20,
+    const userId = req.user?.id;
+    const { filter = 'all', limit = 50, page = 1 } = req.query;
+
+    const where = {
+      OR: [{ userId }, { userId: null }],
+    };
+
+    if (filter === 'unread') {
+      where.isRead = false;
+    } else if (filter === 'read') {
+      where.isRead = true;
+    }
+
+    const take = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 100);
+    const skip = (Math.max(parseInt(page, 10) || 1, 1) - 1) * take;
+
+    const [notifications, unreadCount, totalCount] = await Promise.all([
+      prisma.notification.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take,
+        skip,
+      }),
+      prisma.notification.count({
+        where: {
+          OR: [{ userId }, { userId: null }],
+          isRead: false,
+        },
+      }),
+      prisma.notification.count({ where }),
+    ]);
+
+    res.json({
+      success: true,
+      unreadCount,
+      totalCount,
+      data: notifications,
     });
-    const unreadCount = await prisma.notification.count({ where: { isRead: false } });
-    res.json({ success: true, unreadCount, data: notifications });
   } catch (err) {
     next(err);
   }
@@ -276,11 +308,135 @@ export const getNotifications = async (req, res, next) => {
 export const markNotificationRead = async (req, res, next) => {
   try {
     const { id } = req.params;
-    await prisma.notification.update({
+    const userId = req.user?.id;
+
+    const notification = await prisma.notification.findUnique({
+      where: { id },
+    });
+
+    if (!notification) {
+      return res.status(404).json({ success: false, message: 'Notification not found' });
+    }
+
+    // Authorization: User can only modify their own notification (unless Super Admin)
+    if (notification.userId && notification.userId !== userId && !req.user?.isSuperAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: You do not have permission to modify another user's notification",
+      });
+    }
+
+    const updated = await prisma.notification.update({
       where: { id },
       data: { isRead: true },
     });
-    res.json({ success: true, message: 'Notification marked as read' });
+
+    const unreadCount = await prisma.notification.count({
+      where: {
+        OR: [{ userId }, { userId: null }],
+        isRead: false,
+      },
+    });
+
+    res.json({
+      success: true,
+      message: 'Notification marked as read',
+      unreadCount,
+      data: updated,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const markAllNotificationsRead = async (req, res, next) => {
+  try {
+    const userId = req.user?.id;
+
+    await prisma.notification.updateMany({
+      where: {
+        OR: [{ userId }, { userId: null }],
+        isRead: false,
+      },
+      data: { isRead: true },
+    });
+
+    res.json({
+      success: true,
+      message: 'All notifications marked as read',
+      unreadCount: 0,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const deleteNotification = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+
+    const notification = await prisma.notification.findUnique({
+      where: { id },
+    });
+
+    if (!notification) {
+      return res.status(404).json({ success: false, message: 'Notification not found' });
+    }
+
+    // Authorization: User can only delete their own notification (unless Super Admin)
+    if (notification.userId && notification.userId !== userId && !req.user?.isSuperAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: You do not have permission to delete another user's notification",
+      });
+    }
+
+    await prisma.notification.delete({
+      where: { id },
+    });
+
+    const unreadCount = await prisma.notification.count({
+      where: {
+        OR: [{ userId }, { userId: null }],
+        isRead: false,
+      },
+    });
+
+    res.json({
+      success: true,
+      message: 'Notification deleted successfully',
+      unreadCount,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const clearReadNotifications = async (req, res, next) => {
+  try {
+    const userId = req.user?.id;
+
+    const result = await prisma.notification.deleteMany({
+      where: {
+        OR: [{ userId }, { userId: null }],
+        isRead: true,
+      },
+    });
+
+    const unreadCount = await prisma.notification.count({
+      where: {
+        OR: [{ userId }, { userId: null }],
+        isRead: false,
+      },
+    });
+
+    res.json({
+      success: true,
+      message: 'Read notifications cleared successfully',
+      deletedCount: result.count,
+      unreadCount,
+    });
   } catch (err) {
     next(err);
   }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { productApi } from '../services/api';
+import { getImageUrl } from '../utils/imageUrl';
 import DemoRequestModal from '../components/common/DemoRequestModal';
 import {
   ArrowLeft,
@@ -116,15 +117,21 @@ export const ProductDetailPage = () => {
 
   // Build screenshot gallery
   const gallery = [];
-  if (product.coverImage) gallery.push(product.coverImage);
+  if (product.coverImage) gallery.push(getImageUrl(product.coverImage));
   if (Array.isArray(product.screenshots)) {
     product.screenshots.forEach((img) => {
-      if (img && !gallery.includes(img)) gallery.push(img);
+      if (img) {
+        const resolved = getImageUrl(img);
+        if (!gallery.includes(resolved)) gallery.push(resolved);
+      }
     });
   }
   if (Array.isArray(product.productImages)) {
     product.productImages.forEach((imgObj) => {
-      if (imgObj.url && !gallery.includes(imgObj.url)) gallery.push(imgObj.url);
+      if (imgObj.url) {
+        const resolved = getImageUrl(imgObj.url);
+        if (!gallery.includes(resolved)) gallery.push(resolved);
+      }
     });
   }
   if (gallery.length === 0) {
@@ -623,12 +630,14 @@ export const ProductDetailPage = () => {
                 <div>
                   <div className="h-44 overflow-hidden relative">
                     <img
-                      src={
-                        rel.coverImage ||
-                        rel.screenshots?.[0] ||
+                      src={getImageUrl(
+                        rel.coverImage || rel.screenshots?.[0],
                         'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=600&q=80'
-                      }
+                      )}
                       alt={rel.name}
+                      onError={(e) => {
+                        e.currentTarget.src = 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=600&q=80';
+                      }}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                     <div className="absolute top-2.5 left-2.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-950/80 text-brand-cyan backdrop-blur-md">

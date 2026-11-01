@@ -12,6 +12,7 @@ import {
   Filter,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { getImageUrl } from '../utils/imageUrl';
 
 const GithubIcon = () => (
   <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
@@ -128,8 +129,11 @@ export const ProjectsPage = () => {
                 <div>
                   <Link to={`/projects/${proj.slug || proj.id}`} className="block h-52 overflow-hidden relative cursor-pointer">
                     <img
-                      src={proj.coverImage || proj.screenshots?.[0] || 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80'}
+                      src={getImageUrl(proj.coverImage || proj.screenshots?.[0], 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80')}
                       alt={proj.title}
+                      onError={(e) => {
+                        e.currentTarget.src = 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80';
+                      }}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                     <div className="absolute top-3 left-3 px-3 py-1 rounded-full text-[10px] font-bold bg-slate-950/80 text-brand-cyan backdrop-blur-md border border-brand-cyan/30">
@@ -206,7 +210,7 @@ export const ProjectsPage = () => {
             {activeProject.screenshots?.length > 0 && (
               <div className="h-64 sm:h-80 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700/80">
                 <img
-                  src={activeProject.screenshots[0]}
+                  src={getImageUrl(activeProject.screenshots[0])}
                   alt={activeProject.title}
                   className="w-full h-full object-cover"
                 />

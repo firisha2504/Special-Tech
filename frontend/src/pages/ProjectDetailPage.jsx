@@ -16,6 +16,7 @@ import {
   Check,
   Code2,
 } from 'lucide-react';
+import { getImageUrl } from '../utils/imageUrl';
 
 const GithubIcon = () => (
   <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
@@ -100,15 +101,21 @@ export const ProjectDetailPage = () => {
 
   // Combine cover image and screenshots for gallery
   const gallery = [];
-  if (project.coverImage) gallery.push(project.coverImage);
+  if (project.coverImage) gallery.push(getImageUrl(project.coverImage));
   if (Array.isArray(project.screenshots)) {
     project.screenshots.forEach((img) => {
-      if (img && !gallery.includes(img)) gallery.push(img);
+      if (img) {
+        const resolved = getImageUrl(img);
+        if (!gallery.includes(resolved)) gallery.push(resolved);
+      }
     });
   }
   if (Array.isArray(project.projectImages)) {
     project.projectImages.forEach((imgObj) => {
-      if (imgObj.url && !gallery.includes(imgObj.url)) gallery.push(imgObj.url);
+      if (imgObj.url) {
+        const resolved = getImageUrl(imgObj.url);
+        if (!gallery.includes(resolved)) gallery.push(resolved);
+      }
     });
   }
   if (gallery.length === 0) {
@@ -428,8 +435,11 @@ export const ProjectDetailPage = () => {
                 <div>
                   <div className="h-44 overflow-hidden relative">
                     <img
-                      src={rel.coverImage || rel.screenshots?.[0] || 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=600&q=80'}
+                      src={getImageUrl(rel.coverImage || rel.screenshots?.[0], 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=600&q=80')}
                       alt={rel.title}
+                      onError={(e) => {
+                        e.currentTarget.src = 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=600&q=80';
+                      }}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                     <div className="absolute top-2.5 left-2.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-950/80 text-brand-cyan backdrop-blur-md">

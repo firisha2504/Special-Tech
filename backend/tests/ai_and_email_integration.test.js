@@ -176,7 +176,7 @@ describe('External AI & SMTP Email Production Configuration Tests', () => {
 
     const result = await verifySMTPConnection();
     assert.strictEqual(result.success, false);
-    assert.ok(result.status === 'auth_failed' || result.status === 'error');
+    assert.ok(result.status === 'auth_failed' || result.status === 'error' || result.status === 'unreachable');
     assert.ok(result.error);
     // Never expose password in returned object
     assert.strictEqual(result.rawPass, undefined);

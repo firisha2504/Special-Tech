@@ -4,6 +4,7 @@ import {
   demoRequestSchema,
   demoRequestStatusSchema,
 } from '../validators/schemas.js';
+import { notifyNewDemoRequest } from '../services/notification/notificationService.js';
 
 // ==================== PRODUCTS ====================
 
@@ -358,14 +359,7 @@ export const createDemoRequest = async (req, res, next) => {
     });
 
     // Create an in-app notification for administrators
-    await prisma.notification.create({
-      data: {
-        title: 'New Product Demo Request',
-        message: `${validated.name} (${validated.company || validated.email}) requested a demo for ${productName || 'Special Tech Products'}.`,
-        type: 'demo_request',
-        link: `/admin?tab=products`,
-      },
-    });
+    await notifyNewDemoRequest(demoRequest);
 
     res.status(201).json({
       success: true,
