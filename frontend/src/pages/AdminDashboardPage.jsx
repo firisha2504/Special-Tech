@@ -40,9 +40,9 @@ import {
   Key,
   Globe,
   Check,
-  Info,
   Lock,
   User,
+  FolderKanban,
 } from 'lucide-react';
 import Logo from '../components/common/Logo';
 import AdminLayout from '../layouts/AdminLayout';
@@ -119,6 +119,7 @@ export const AdminDashboardPage = () => {
   const [updatingInquiry, setUpdatingInquiry] = useState(null);
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [commissioningInquiryId, setCommissioningInquiryId] = useState(null);
 
   // Auto-dismiss toast notification
   useEffect(() => {
@@ -318,6 +319,45 @@ export const AdminDashboardPage = () => {
       }
     } catch (err) {
       console.error('Failed to load full inquiry details:', err);
+    }
+  };
+
+  const handleCommissionInquiry = async (inq) => {
+    if (!window.confirm(`Are you sure you want to approve and commission proposal ${inq.inquiryNumber} ("${inq.title}") into an active customer project?`)) {
+      return;
+    }
+    setCommissioningInquiryId(inq.id);
+    try {
+      const res = await inquiryApi.commission(inq.id, {
+        title: inq.title,
+        status: 'In Progress',
+        progress: 25,
+      });
+      if (res.data?.success) {
+        setToast({
+          type: 'success',
+          title: 'Project Commissioned',
+          message: res.data.message || 'Project created and tracking initialized.',
+        });
+        const inqRes = await inquiryApi.getAll({ status: 'ALL' });
+        if (inqRes.data?.success) setInquiries(inqRes.data.data);
+        if (selectedInquiry?.id === inq.id) {
+          setSelectedInquiry({
+            ...selectedInquiry,
+            projectId: res.data.data?.id,
+            project: res.data.data,
+            status: 'IN_PROGRESS',
+          });
+        }
+      }
+    } catch (err) {
+      setToast({
+        type: 'error',
+        title: 'Commissioning Failed',
+        message: err.response?.data?.message || err.message || 'Failed to commission project.',
+      });
+    } finally {
+      setCommissioningInquiryId(null);
     }
   };
 
@@ -958,6 +998,24 @@ export const AdminDashboardPage = () => {
                             <Sliders className="w-3.5 h-3.5" />
                             <span>Status</span>
                           </button>
+                          {inq.projectId ? (
+                            <span
+                              title="Commissioned as Active Project"
+                              className="px-2 py-1 rounded-lg bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 text-[10px] font-mono font-bold flex items-center gap-1 border border-cyan-500/20"
+                            >
+                              <FolderKanban className="w-3 h-3" />
+                              <span>Project</span>
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleCommissionInquiry(inq)}
+                              title="Commission as Active Project"
+                              className="px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500 hover:text-white font-semibold transition-colors flex items-center gap-1 cursor-pointer text-xs"
+                            >
+                              <FolderKanban className="w-3.5 h-3.5" />
+                              <span>Commission</span>
+                            </button>
+                          )}
                           <button
                             onClick={() => window.open(inquiryApi.getPdfUrl(inq.id), '_blank')}
                             title="Download Spec PDF"
@@ -1649,14 +1707,33 @@ export const AdminDashboardPage = () => {
               )}
             </div>
 
-            <div className="pt-4 flex items-center justify-between border-t border-slate-200 dark:border-slate-800">
-              <button
-                onClick={() => window.open(inquiryApi.getPdfUrl(selectedInquiry.id), '_blank')}
-                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-glow-blue"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Download Specification PDF</span>
-              </button>
+            <div className="pt-4 flex items-center justify-between border-t border-slate-200 dark:border-slate-800 flex-wrap gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => window.open(inquiryApi.getPdfUrl(selectedInquiry.id), '_blank')}
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-glow-blue"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download Specification PDF</span>
+                </button>
+
+                {selectedInquiry.projectId || selectedInquiry.project ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 font-bold text-xs border border-cyan-500/20">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Active Project Commissioned</span>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={commissioningInquiryId === selectedInquiry.id}
+                    onClick={() => handleCommissionInquiry(selectedInquiry)}
+                    className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <FolderKanban className="w-3.5 h-3.5" />
+                    <span>{commissioningInquiryId === selectedInquiry.id ? 'Commissioning...' : 'Approve & Commission as Project'}</span>
+                  </button>
+                )}
+              </div>
 
               <button
                 onClick={() => setSelectedInquiry(null)}

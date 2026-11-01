@@ -402,3 +402,141 @@ export const downloadSpecificationPDF = async (req, res, next) => {
     next(err);
   }
 };
+
+/**
+ * Commission an Inquiry into an Active Project
+ * Creates or links a Project record, updates inquiry status to IN_PROGRESS,
+ * adds ProjectStatusHistory, and notifies the customer.
+ */
+export const commissionInquiryToProject = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const {
+      title,
+      category,
+      status = 'In Progress',
+      progress = 25,
+      features,
+      technologies,
+      shortDesc,
+      description,
+    } = req.body || {};
+
+    const inquiry = await prisma.inquiry.findUnique({
+      where: { id },
+      include: {
+        customer: true,
+        requirement: true,
+        service: true,
+        project: true,
+      },
+    });
+
+    if (!inquiry) {
+      return res.status(404).json({ success: false, message: 'Inquiry not found' });
+    }
+
+    if (inquiry.projectId && inquiry.project) {
+      return res.status(400).json({
+        success: false,
+        message: `This inquiry is already linked to active project "${inquiry.project.title}".`,
+        data: inquiry.project,
+      });
+    }
+
+    const projectTitle = title?.trim() || inquiry.title || 'Commissioned Customer Project';
+    const baseSlug = projectTitle
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)+/g, '');
+    let slug = baseSlug;
+    let counter = 1;
+    while (await prisma.project.findUnique({ where: { slug } })) {
+      slug = `${baseSlug}-${counter}`;
+      counter++;
+    }
+
+    const project = await prisma.project.create({
+      data: {
+        title: projectTitle,
+        slug,
+        category: category || inquiry.service?.title || 'AI & Automation',
+        shortDesc: shortDesc || inquiry.message?.slice(0, 160) || 'Active Special Tech engineering project.',
+        description: description || inquiry.message || 'Custom engineering deliverable.',
+        clientName: inquiry.customer?.name || 'Valued Client',
+        customerId: inquiry.customerId,
+        status: status || 'In Progress',
+        progress: Math.min(100, Math.max(0, Number(progress) || 25)),
+        features: Array.isArray(features) && features.length > 0
+          ? features
+          : (inquiry.requirement?.objectives?.length > 0 ? inquiry.requirement.objectives : ['System Architecture', 'Core Module Implementation', 'Client Milestone Review']),
+        technologies: Array.isArray(technologies) && technologies.length > 0
+          ? technologies
+          : ['React', 'Node.js', 'PostgreSQL'],
+        isPublished: true,
+        isFeatured: true,
+      },
+    });
+
+    // Link inquiry to project and update status
+    const updatedInquiry = await prisma.inquiry.update({
+      where: { id: inquiry.id },
+      data: {
+        projectId: project.id,
+        status: 'IN_PROGRESS',
+      },
+    });
+
+    // Record initial status history
+    await prisma.projectStatusHistory.create({
+      data: {
+        projectId: project.id,
+        customerId: inquiry.customerId,
+        changedById: req.user?.id || null,
+        previousStatus: 'Pending',
+        newStatus: project.status,
+        message: `Project commissioned from inquiry ${inquiry.inquiryNumber}. Development initialized.`,
+      },
+    });
+
+    // Create in-app notification for the customer
+    await prisma.notification.create({
+      data: {
+        customerId: inquiry.customerId,
+        projectId: project.id,
+        title: `Project Commissioned: ${project.title}`,
+        message: `Your project proposal ${inquiry.inquiryNumber} has been approved and commissioned! Live milestone progress tracking is now active.`,
+        type: 'project_status_change',
+        channel: 'IN_APP',
+        deliveryStatus: 'DELIVERED',
+        link: '/my-projects',
+        isRead: false,
+      },
+    });
+
+    await prisma.activityLog.create({
+      data: {
+        userId: req.user?.id,
+        action: 'INQUIRY_COMMISSIONED_TO_PROJECT',
+        entityType: 'PROJECT',
+        entityId: project.id,
+        details: {
+          inquiryId: inquiry.id,
+          inquiryNumber: inquiry.inquiryNumber,
+          projectTitle: project.title,
+          customerId: inquiry.customerId,
+        },
+      },
+    });
+
+    res.status(201).json({
+      success: true,
+      message: `Inquiry ${inquiry.inquiryNumber} successfully commissioned into active project "${project.title}"!`,
+      data: project,
+      inquiry: updatedInquiry,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+

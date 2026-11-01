@@ -86,6 +86,7 @@ export const inquiryApi = {
   getById: (id) => api.get(`/inquiries/${id}`),
   updateStatus: (id, data) => api.patch(`/inquiries/${id}/status`, data),
   retryEmail: (id, data) => api.post(`/inquiries/${id}/retry-email`, data),
+  commission: (id, data) => api.post(`/inquiries/${id}/commission`, data),
   getPdfUrl: (id) => `${API_BASE_URL}/inquiries/${id}/pdf`,
 };
 
@@ -155,6 +156,7 @@ export const customerApi = {
   getProfile: () => customerClient.get('/customer/auth/me'),
   getProjects: () => customerClient.get('/customer/projects'),
   getProjectById: (id) => customerClient.get(`/customer/projects/${id}`),
+  getInquiries: () => customerClient.get('/customer/inquiries'),
   getNotifications: (params) => customerClient.get('/customer/notifications', { params }),
   markNotificationRead: (id) => customerClient.patch(`/customer/notifications/${id}/read`),
   markAllNotificationsRead: () => customerClient.patch('/customer/notifications/read-all'),

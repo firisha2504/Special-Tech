@@ -25,8 +25,37 @@ import {
   Eye,
   Sliders,
   CheckCheck,
+  Inbox,
+  Download,
 } from 'lucide-react';
-import { customerApi } from '../services/api';
+import { customerApi, inquiryApi } from '../services/api';
+
+const INQUIRY_STATUS_CONFIG = {
+  NEW: {
+    label: 'Received',
+    badge: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30',
+  },
+  UNDER_REVIEW: {
+    label: 'Under Review',
+    badge: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30',
+  },
+  ESTIMATED: {
+    label: 'Estimated & Scoped',
+    badge: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30',
+  },
+  IN_PROGRESS: {
+    label: 'In Active Development',
+    badge: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/30',
+  },
+  COMPLETED: {
+    label: 'Completed',
+    badge: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
+  },
+  CANCELLED: {
+    label: 'Cancelled',
+    badge: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30',
+  },
+};
 
 const STATUS_CONFIG = {
   Pending: {
@@ -83,6 +112,7 @@ const STATUS_CONFIG = {
 export const MyProjectsPage = () => {
   const [customer, setCustomer] = useState(null);
   const [projects, setProjects] = useState([]);
+  const [inquiries, setInquiries] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -94,7 +124,7 @@ export const MyProjectsPage = () => {
   const [loginError, setLoginError] = useState('');
 
   // UI state
-  const [activeTab, setActiveTab] = useState('projects'); // 'projects' | 'notifications'
+  const [activeTab, setActiveTab] = useState('projects'); // 'projects' | 'inquiries' | 'notifications'
   const [selectedProject, setSelectedProject] = useState(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [notificationFilter, setNotificationFilter] = useState('ALL'); // 'ALL' | 'UNREAD'
@@ -114,6 +144,7 @@ export const MyProjectsPage = () => {
         setCustomer(res.data.data);
         await Promise.all([
           loadProjects(),
+          loadInquiries(),
           loadNotifications(),
         ]);
       } else {
@@ -139,6 +170,7 @@ export const MyProjectsPage = () => {
         setCustomer(res.data.data.customer);
         await Promise.all([
           loadProjects(),
+          loadInquiries(),
           loadNotifications(),
         ]);
       }
@@ -155,6 +187,7 @@ export const MyProjectsPage = () => {
     localStorage.removeItem('customer_token');
     setCustomer(null);
     setProjects([]);
+    setInquiries([]);
     setNotifications([]);
     setSelectedProject(null);
   };
@@ -167,6 +200,17 @@ export const MyProjectsPage = () => {
       }
     } catch (err) {
       console.error('Failed to load customer projects', err);
+    }
+  };
+
+  const loadInquiries = async () => {
+    try {
+      const res = await customerApi.getInquiries();
+      if (res.data?.success) {
+        setInquiries(res.data.data || []);
+      }
+    } catch (err) {
+      console.error('Failed to load customer inquiries', err);
     }
   };
 
@@ -448,6 +492,7 @@ export const MyProjectsPage = () => {
             <button
               onClick={() => {
                 loadProjects();
+                loadInquiries();
                 loadNotifications();
               }}
               title="Refresh projects & notifications"
@@ -468,16 +513,28 @@ export const MyProjectsPage = () => {
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3 text-xs">
+        <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3 text-xs flex-wrap">
           <button
             onClick={() => setActiveTab('projects')}
-            className={`px-4 py-2 rounded-xl font-bold transition-all cursor-pointer ${
+            className={`px-4 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-2 ${
               activeTab === 'projects'
                 ? 'bg-blue-600 text-white shadow-md shadow-brand-blue/20'
                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
-            My Active Projects ({projects.length})
+            <FolderKanban className="w-3.5 h-3.5" />
+            <span>My Active Projects ({projects.length})</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('inquiries')}
+            className={`px-4 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              activeTab === 'inquiries'
+                ? 'bg-blue-600 text-white shadow-md shadow-brand-blue/20'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <Inbox className="w-3.5 h-3.5" />
+            <span>Submitted Orders & Inquiries ({inquiries.length})</span>
           </button>
           <button
             onClick={() => setActiveTab('notifications')}
@@ -487,6 +544,7 @@ export const MyProjectsPage = () => {
                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
+            <Bell className="w-3.5 h-3.5" />
             <span>Status Notifications</span>
             {unreadCount > 0 && (
               <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-500 text-white font-mono">
@@ -500,22 +558,45 @@ export const MyProjectsPage = () => {
         {activeTab === 'projects' && (
           <div className="space-y-6">
             {projects.length === 0 ? (
-              <div className="p-12 text-center rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
-                <div className="w-12 h-12 mx-auto rounded-2xl bg-cyan-500/10 text-cyan-500 flex items-center justify-center">
-                  <FolderKanban className="w-6 h-6" />
+              <div className="p-10 sm:p-12 text-center rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+                <div className="w-14 h-14 mx-auto rounded-2xl bg-cyan-500/10 text-cyan-500 flex items-center justify-center">
+                  <FolderKanban className="w-7 h-7" />
                 </div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  No Active Projects Found
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-                  You currently do not have any commissioned projects associated with this customer account. Once your proposal or project is approved, it will appear here with live tracking.
-                </p>
-                <Link
-                  to="/contact"
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-blue text-white text-xs font-bold hover:bg-blue-500 transition-colors"
-                >
-                  Commission New Project
-                </Link>
+                {inquiries.length > 0 ? (
+                  <div className="space-y-3 max-w-md mx-auto">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                      Order Under Engineering Review
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                      You have <span className="font-bold text-cyan-500">{inquiries.length} submitted project order/inquiry</span> currently undergoing architecture review and sprint planning. Once officially commissioned, live sprint tracking will appear here.
+                    </p>
+                    <div className="pt-2 flex items-center justify-center gap-3">
+                      <button
+                        onClick={() => setActiveTab('inquiries')}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 text-white text-xs font-bold shadow-md shadow-brand-blue/20 hover:from-blue-500 hover:to-cyan-400 transition-all cursor-pointer"
+                      >
+                        <Inbox className="w-3.5 h-3.5" />
+                        <span>View Submitted Orders ({inquiries.length})</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-w-md mx-auto">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                      No Active Projects Found
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      You currently do not have any commissioned projects associated with this customer account. Once your proposal or project is approved, it will appear here with live tracking.
+                    </p>
+                    <Link
+                      to="/contact"
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-blue text-white text-xs font-bold hover:bg-blue-500 transition-colors"
+                    >
+                      Commission New Project
+                    </Link>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-6">
@@ -686,7 +767,136 @@ export const MyProjectsPage = () => {
           </div>
         )}
 
-        {/* TAB 2: NOTIFICATIONS VIEW */}
+        {/* TAB 2: SUBMITTED PROPOSALS & ORDERS VIEW */}
+        {activeTab === 'inquiries' && (
+          <div className="space-y-6">
+            {inquiries.length === 0 ? (
+              <div className="p-12 text-center rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+                <div className="w-12 h-12 mx-auto rounded-2xl bg-blue-500/10 text-brand-blue flex items-center justify-center">
+                  <Inbox className="w-6 h-6" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  No Submitted Proposals Found
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                  You haven't submitted any project proposals or discovery inquiries yet. Use our AI Project Builder or Contact form to commission a new project.
+                </p>
+                <Link
+                  to="/ai-assistant"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 text-white text-xs font-bold hover:from-blue-500 hover:to-cyan-400 transition-all shadow-md shadow-brand-blue/20"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Build Your Idea with AI</span>
+                </Link>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-5">
+                {inquiries.map((inq) => {
+                  const inqStatus = INQUIRY_STATUS_CONFIG[inq.status] || {
+                    label: inq.status,
+                    badge: 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30',
+                  };
+
+                  return (
+                    <div
+                      key={inq.id}
+                      className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl space-y-4 hover:border-slate-300 dark:hover:border-slate-700 transition-all"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                        <div className="space-y-1 flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono font-bold text-xs text-cyan-600 dark:text-cyan-400">
+                              {inq.inquiryNumber}
+                            </span>
+                            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                              {inq.title}
+                            </h3>
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${inqStatus.badge}`}>
+                              {inqStatus.label}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                            {inq.message}
+                          </p>
+                        </div>
+
+                        <div className="text-left sm:text-right flex-shrink-0 text-xs">
+                          <div className="font-mono text-[11px] text-slate-400">
+                            Submitted: {new Date(inq.createdAt).toLocaleDateString()}
+                          </div>
+                          {inq.budget && (
+                            <div className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-xs mt-0.5">
+                              Budget: {inq.budget}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Linked project card or review notice */}
+                      {inq.project ? (
+                        <div className="p-4 rounded-2xl bg-cyan-50/70 dark:bg-cyan-950/20 border border-cyan-500/30 flex items-center justify-between gap-4 flex-wrap">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-xl bg-cyan-500/10 text-cyan-500 flex items-center justify-center flex-shrink-0">
+                              <CheckCircle2 className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                <span>Commissioned Project: {inq.project.title}</span>
+                                <span className="px-2 py-0.2 rounded-full text-[10px] font-mono bg-cyan-500/10 text-cyan-500 font-bold">
+                                  {inq.project.status}
+                                </span>
+                              </div>
+                              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                                Milestone Progress: {inq.project.progress}% Complete
+                              </span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => {
+                              const proj = projects.find((p) => p.id === inq.project.id);
+                              if (proj) {
+                                setSelectedProject(proj);
+                              }
+                              setActiveTab('projects');
+                            }}
+                            className="px-3.5 py-2 rounded-xl bg-brand-blue hover:bg-blue-600 text-white text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-md shadow-brand-blue/20"
+                          >
+                            <FolderKanban className="w-3.5 h-3.5" />
+                            <span>Track Active Project</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 text-xs">
+                          <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                            <Clock className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                            <span>Engineering team review in progress. Live tracking will be enabled upon commissioning.</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Actions */}
+                      <div className="pt-2 flex items-center justify-between border-t border-slate-100 dark:border-slate-800/80 text-xs flex-wrap gap-2">
+                        <span className="text-[11px] text-slate-400 font-mono">
+                          Preferred Contact: {inq.preferredContact || 'Email'}
+                        </span>
+                        <button
+                          onClick={() => window.open(inquiryApi.getPdfUrl(inq.id), '_blank')}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-semibold transition-colors cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5 text-cyan-500" />
+                          <span>Download Spec PDF</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 3: NOTIFICATIONS VIEW */}
         {activeTab === 'notifications' && (
           <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden">
             {/* Notification Toolbar */}

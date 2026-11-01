@@ -350,3 +350,59 @@ export const deleteCustomerNotification = async (req, res, next) => {
     next(err);
   }
 };
+
+/**
+ * Get All Inquiries / Proposals Submitted by Authenticated Customer
+ */
+export const getCustomerInquiries = async (req, res, next) => {
+  try {
+    const customerId = req.customer.id;
+
+    const inquiries = await prisma.inquiry.findMany({
+      where: { customerId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        project: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            progress: true,
+            slug: true,
+            updatedAt: true,
+          },
+        },
+        requirement: {
+          select: {
+            id: true,
+            projectName: true,
+            overview: true,
+            version: true,
+          },
+        },
+        service: {
+          select: {
+            id: true,
+            title: true,
+          },
+        },
+        prototypeVersion: {
+          select: {
+            id: true,
+            versionNumber: true,
+            prototypeId: true,
+          },
+        },
+      },
+    });
+
+    res.json({
+      success: true,
+      count: inquiries.length,
+      data: inquiries,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+

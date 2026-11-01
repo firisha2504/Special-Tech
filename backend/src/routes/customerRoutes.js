@@ -8,6 +8,7 @@ import {
   markCustomerNotificationRead,
   markAllCustomerNotificationsRead,
   deleteCustomerNotification,
+  getCustomerInquiries,
 } from '../controllers/customerController.js';
 import { authenticateCustomer } from '../middleware/customerAuth.js';
 
@@ -25,6 +26,9 @@ router.get('/auth/me', getCustomerProfile);
 // Customer Projects
 router.get('/projects', getCustomerProjects);
 router.get('/projects/:id', getCustomerProjectById);
+
+// Customer Proposals & Inquiries
+router.get('/inquiries', getCustomerInquiries);
 
 // Customer In-App Notifications
 router.get('/notifications', getCustomerNotifications);
