@@ -44,6 +44,11 @@ model User {
   role            Role             @default(ADMIN)
   isSuperAdmin    Boolean          @default(false)
   avatar          String?
+  phone           String?
+  jobTitle        String?
+  department      String?
+  bio             String?
+  lastLoginAt     DateTime?
   isActive        Boolean          @default(true)
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt

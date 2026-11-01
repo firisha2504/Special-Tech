@@ -53,8 +53,15 @@ import {
   updateAdminPermissions,
   deleteAdminUser,
 } from '../controllers/rbacController.js';
+import {
+  getAdminProfile,
+  updateAdminProfile,
+  uploadAdminPhoto,
+  removeAdminPhoto,
+  changeAdminPassword,
+} from '../controllers/profileController.js';
 import { authenticateToken, requireRole, requirePermission, requireSuperAdmin } from '../middleware/auth.js';
-import { upload } from '../middleware/upload.js';
+import { upload, avatarUpload } from '../middleware/upload.js';
 import { Role } from '@prisma/client';
 
 const router = Router();
@@ -64,6 +71,26 @@ router.get('/team', getTeamMembers);
 
 // Protected Admin Base Check: Requires authentication and administrative privileges
 router.use(authenticateToken, requireRole([Role.ADMIN, Role.SUPER_ADMIN]));
+
+// Avatar upload error-handling middleware wrapper
+const handleAvatarUpload = (req, res, next) => {
+  avatarUpload.single('photo')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({
+        success: false,
+        message: err.message || 'Error uploading profile photo',
+      });
+    }
+    next();
+  });
+};
+
+// Administrator Self-Profile Management (Accessible by any authenticated Admin / Super Admin)
+router.get('/profile', getAdminProfile);
+router.put('/profile', updateAdminProfile);
+router.post('/profile/photo', handleAvatarUpload, uploadAdminPhoto);
+router.delete('/profile/photo', removeAdminPhoto);
+router.put('/profile/change-password', changeAdminPassword);
 
 // RBAC & Permission Management Endpoints (Super Admin & Admin Delegation)
 router.get('/permissions', requirePermission('manage_admins'), getAllPermissions);

@@ -49,8 +49,46 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  const updateUser = (updates) => {
+    setUser((prev) => (prev ? { ...prev, ...updates } : updates));
+  };
+
+  const updateToken = (newToken) => {
+    if (newToken) {
+      localStorage.setItem('special_tech_token', newToken);
+      setToken(newToken);
+    }
+  };
+
+  const refreshUser = async () => {
+    const currentToken = token || localStorage.getItem('special_tech_token');
+    if (!currentToken) return;
+    try {
+      const res = await axios.get(`${API_BASE}/auth/me`, {
+        headers: { Authorization: `Bearer ${currentToken}` },
+      });
+      if (res.data.success) {
+        setUser(res.data.user);
+      }
+    } catch (e) {
+      // Ignore network glitch on background refresh
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, loading, isAuthenticated: !!user }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        token,
+        login,
+        logout,
+        loading,
+        isAuthenticated: !!user,
+        updateUser,
+        updateToken,
+        refreshUser,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

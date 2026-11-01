@@ -111,6 +111,14 @@ export const adminApi = {
   testSMTPConnection: (data) => api.post('/admin/email/test-connection', data),
   sendTestEmail: (data) => api.post('/admin/email/send-test', data),
   exportBackup: () => api.get('/admin/backups/export'),
+  getProfile: () => api.get('/admin/profile'),
+  updateProfile: (data) => api.put('/admin/profile', data),
+  uploadProfilePhoto: (formData) =>
+    api.post('/admin/profile/photo', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  removeProfilePhoto: () => api.delete('/admin/profile/photo'),
+  changePassword: (data) => api.put('/admin/profile/change-password', data),
 };
 
 export const rbacApi = {

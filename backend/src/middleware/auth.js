@@ -49,6 +49,12 @@ export const authenticateToken = async (req, res, next) => {
         role: true,
         isSuperAdmin: true,
         avatar: true,
+        phone: true,
+        jobTitle: true,
+        department: true,
+        bio: true,
+        lastLoginAt: true,
+        createdAt: true,
         isActive: true,
         userPermissions: {
           select: {
@@ -81,6 +87,12 @@ export const authenticateToken = async (req, res, next) => {
       role: user.role,
       isSuperAdmin: isSuper,
       avatar: user.avatar,
+      phone: user.phone || null,
+      jobTitle: user.jobTitle || null,
+      department: user.department || null,
+      bio: user.bio || null,
+      lastLoginAt: user.lastLoginAt || null,
+      createdAt: user.createdAt,
       isActive: user.isActive,
       permissions,
     };

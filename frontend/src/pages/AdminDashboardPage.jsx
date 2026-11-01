@@ -42,12 +42,14 @@ import {
   Check,
   Info,
   Lock,
+  User,
 } from 'lucide-react';
 import Logo from '../components/common/Logo';
 import AdminLayout from '../layouts/AdminLayout';
 import AdminProjectManager from '../features/admin/AdminProjectManager';
 import AdminProductManager from '../features/admin/AdminProductManager';
 import AdminPermissionManager from '../features/admin/AdminPermissionManager';
+import AdminProfileManager from '../features/admin/AdminProfileManager';
 import InquiryStatusModal from '../components/admin/InquiryStatusModal';
 import { SimpleEmailManager } from '../components/admin/SimpleEmailManager';
 
@@ -61,6 +63,7 @@ const ADMIN_TABS = [
   { id: 'permissions', name: 'Permissions & Roles', icon: ShieldCheck, permission: 'manage_admins' },
   { id: 'settings', name: 'Settings', icon: Settings, permission: 'manage_system_settings' },
   { id: 'logs', name: 'Audit Logs', icon: History, permission: 'view_audit_logs' },
+  { id: 'profile', name: 'My Profile', icon: User },
 ];
 
 export const AdminDashboardPage = () => {
@@ -74,7 +77,7 @@ export const AdminDashboardPage = () => {
   const [loggingIn, setLoggingIn] = useState(false);
 
   // Active admin tab with URL search parameter persistence
-  const validTabIds = ['overview', 'inquiries', 'projects', 'products', 'customers', 'ai', 'permissions', 'settings', 'logs'];
+  const validTabIds = ['overview', 'inquiries', 'projects', 'products', 'customers', 'ai', 'permissions', 'settings', 'logs', 'profile'];
   const urlTab = searchParams.get('tab');
   const initialTab = validTabIds.includes(urlTab) ? urlTab : 'overview';
   const [activeTab, setActiveTabState] = useState(initialTab);
@@ -1375,6 +1378,19 @@ export const AdminDashboardPage = () => {
               ))
             )}
           </div>
+        </div>
+      )}
+
+      {/* TAB 8: ADMIN PROFILE */}
+      {activeTab === 'profile' && (
+        <div
+          role="tabpanel"
+          id="admin-panel-profile"
+          aria-labelledby="admin-tab-profile"
+          tabIndex={0}
+          className="focus-visible:outline-none"
+        >
+          <AdminProfileManager />
         </div>
       )}
 

@@ -56,6 +56,13 @@ export const login = async (req, res, next) => {
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
 
+    const now = new Date();
+    // Update lastLoginAt in database
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: now },
+    });
+
     // Record login activity
     await prisma.activityLog.create({
       data: {
@@ -78,6 +85,12 @@ export const login = async (req, res, next) => {
         role: user.role,
         isSuperAdmin: isSuper,
         avatar: user.avatar,
+        phone: user.phone || null,
+        jobTitle: user.jobTitle || null,
+        department: user.department || null,
+        bio: user.bio || null,
+        lastLoginAt: now,
+        createdAt: user.createdAt,
         permissions,
       },
     });

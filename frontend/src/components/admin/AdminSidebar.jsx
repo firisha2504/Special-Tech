@@ -17,6 +17,7 @@ import {
   ExternalLink,
   Shield,
   ShieldCheck,
+  User,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -53,6 +54,12 @@ export const NAV_GROUPS = [
     items: [
       { id: 'logs', name: 'Audit Logs', icon: History, permission: 'view_audit_logs' },
       { id: 'settings', name: 'Settings', icon: Settings, permission: 'manage_system_settings' },
+    ],
+  },
+  {
+    group: 'ACCOUNT',
+    items: [
+      { id: 'profile', name: 'My Profile', icon: User },
     ],
   },
 ];
@@ -202,19 +209,32 @@ export const AdminSidebar = ({
         {/* User Profile Footer Section */}
         <div className="p-3 border-t border-slate-200/90 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-950/40 flex-shrink-0">
           <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between gap-2.5'}`}>
-            <div className="flex items-center gap-2.5 min-w-0">
+            <button
+              type="button"
+              onClick={() => handleItemClick('profile')}
+              title="View & Edit My Profile"
+              className="flex items-center gap-2.5 min-w-0 text-left hover:opacity-85 transition-opacity cursor-pointer group flex-1"
+            >
               {/* User Avatar */}
               <div className="relative flex-shrink-0">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-brand-blue to-cyan-400 text-white font-bold text-xs flex items-center justify-center shadow-xs">
-                  {user?.name ? user.name.charAt(0).toUpperCase() : 'A'}
-                </div>
+                {user?.avatar ? (
+                  <img
+                    src={user.avatar}
+                    alt={user.name || 'Admin'}
+                    className="w-8 h-8 rounded-xl object-cover ring-1 ring-slate-200 dark:ring-slate-700 shadow-xs"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-brand-blue to-cyan-400 text-white font-bold text-xs flex items-center justify-center shadow-xs">
+                    {user?.name ? user.name.charAt(0).toUpperCase() : 'A'}
+                  </div>
+                )}
                 <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900" />
               </div>
 
               {/* User Info (when expanded) */}
               {!isCollapsed && (
                 <div className="min-w-0 flex-1">
-                  <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                  <div className="text-xs font-bold text-slate-900 dark:text-white truncate group-hover:text-brand-blue dark:group-hover:text-brand-cyan transition-colors">
                     {user?.name || 'Administrator'}
                   </div>
                   <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono flex items-center gap-1">
@@ -225,7 +245,7 @@ export const AdminSidebar = ({
                   </div>
                 </div>
               )}
-            </div>
+            </button>
 
             {/* Sign Out Button */}
             <button

@@ -36,10 +36,26 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
+const avatarFilter = (req, file, cb) => {
+  const allowedExtensions = /^\.(jpeg|jpg|png|webp)$/i;
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (allowedExtensions.test(ext) && file.mimetype.startsWith('image/')) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid image format. Only JPEG, PNG, and WebP images are permitted for profile photos.'), false);
+  }
+};
+
 export const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
   fileFilter,
+});
+
+export const avatarUpload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max for avatars
+  fileFilter: avatarFilter,
 });
 
 export { uploadDir };
