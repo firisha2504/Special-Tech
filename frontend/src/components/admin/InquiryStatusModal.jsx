@@ -113,14 +113,16 @@ export const InquiryStatusModal = ({ inquiry, isOpen, onClose, onSuccess }) => {
       setError('');
 
       // Fetch active SMTP configuration to resolve currently selected provider
-      adminApi
-        .getEmailSettings()
-        .then((res) => {
-          if (res.data?.success && res.data?.data?.providerName) {
-            setActiveProvider(res.data.data.providerName);
-          }
-        })
-        .catch(() => {});
+      const fetchEmailConfig = adminApi.getEmailSettings || adminApi.getEmailStatus;
+      if (typeof fetchEmailConfig === 'function') {
+        fetchEmailConfig()
+          .then((res) => {
+            if (res.data?.success && res.data?.data?.providerName) {
+              setActiveProvider(res.data.data.providerName);
+            }
+          })
+          .catch(() => {});
+      }
 
       // Seed delivery telemetry if inquiry already has a recent email notification record
       if (inquiry.latestEmailNotification) {
