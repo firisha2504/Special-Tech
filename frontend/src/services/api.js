@@ -85,6 +85,7 @@ export const inquiryApi = {
   getAll: (params) => api.get('/inquiries', { params }),
   getById: (id) => api.get(`/inquiries/${id}`),
   updateStatus: (id, data) => api.patch(`/inquiries/${id}/status`, data),
+  retryEmail: (id, data) => api.post(`/inquiries/${id}/retry-email`, data),
   getPdfUrl: (id) => `${API_BASE_URL}/inquiries/${id}/pdf`,
 };
 

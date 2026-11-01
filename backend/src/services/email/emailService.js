@@ -667,6 +667,229 @@ export const sendInquiryNotifications = async (payload = {}) => {
 };
 
 /**
+ * Send customer notification email when their project inquiry status changes in the CRM
+ */
+export const sendInquiryStatusEmail = async ({
+  customer,
+  inquiry,
+  previousStatus,
+  newStatus,
+  notes = '',
+}) => {
+  try {
+    if (!customer?.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email.trim())) {
+      return {
+        success: false,
+        status: 'Failed',
+        provider: 'Resend SMTP',
+        error: 'Inquiry owner has no registered or valid customer email address.',
+        recipient: customer?.email || null,
+        maskedRecipient: maskEmail(customer?.email || ''),
+      };
+    }
+
+    const config = await getSMTPConfig();
+    const clientName = customer.name || 'Valued Client';
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5174';
+    const inquiryUrl = `${frontendUrl}/admin?tab=inquiries&id=${inquiry.id}`;
+
+    // Status colors and labels
+    const statusColorMap = {
+      NEW: '#3b82f6',
+      UNDER_REVIEW: '#a855f7',
+      ESTIMATED: '#06b6d4',
+      IN_PROGRESS: '#38bdf8',
+      COMPLETED: '#10b981',
+      CANCELLED: '#ef4444',
+    };
+
+    const statusLabelMap = {
+      NEW: 'New Inquiry',
+      UNDER_REVIEW: 'Under Review',
+      ESTIMATED: 'Estimated / Proposed',
+      IN_PROGRESS: 'In Progress',
+      COMPLETED: 'Completed',
+      CANCELLED: 'Cancelled',
+    };
+
+    const displayStatus = statusLabelMap[newStatus] || newStatus;
+    const displayPrevStatus = statusLabelMap[previousStatus] || previousStatus || 'New Inquiry';
+    const statusColor = statusColorMap[newStatus] || '#38bdf8';
+
+    const updateDate = new Date().toLocaleString('en-US', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      timeZone: 'UTC',
+    }) + ' UTC';
+
+    const statusHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #020D20; color: #f8fafc; margin: 0; padding: 20px; }
+          .container { max-width: 600px; margin: 0 auto; background: #0B192C; border-radius: 16px; overflow: hidden; border: 1px solid #1E293B; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+          .header { background: linear-gradient(135deg, #020D20 0%, #1e3a8a 100%); padding: 32px 24px; text-align: center; border-bottom: 1px solid #1E293B; }
+          .logo { font-size: 22px; font-weight: 800; letter-spacing: 2px; color: #38bdf8; text-transform: uppercase; margin-bottom: 6px; }
+          .badge { display: inline-block; padding: 6px 16px; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #ffffff; background: ${statusColor}; margin-top: 10px; }
+          .content { padding: 32px 24px; }
+          .greeting { font-size: 16px; font-weight: 600; color: #ffffff; margin-bottom: 16px; }
+          .card { background: #030F26; border: 1px solid #1E293B; border-radius: 12px; padding: 20px; margin: 20px 0; }
+          .row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 13px; }
+          .label { color: #94a3b8; }
+          .val { font-weight: 600; color: #f8fafc; text-align: right; }
+          .message-box { background: rgba(56, 189, 248, 0.08); border-left: 3px solid #38bdf8; padding: 14px 18px; border-radius: 0 8px 8px 0; font-size: 13px; color: #e2e8f0; line-height: 1.5; margin: 18px 0; }
+          .cta-btn { display: inline-block; width: 100%; box-sizing: border-box; text-align: center; background: linear-gradient(90deg, #2563eb, #06b6d4); color: #ffffff !important; text-decoration: none; padding: 14px 24px; border-radius: 10px; font-weight: 700; font-size: 14px; margin-top: 20px; }
+          .footer { text-align: center; padding: 20px 24px; font-size: 11px; color: #64748b; border-top: 1px solid #1E293B; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <div class="logo">SPECIAL TECH</div>
+            <div style="font-size: 12px; color: #94a3b8;">Client Project Inquiry Milestone Notification</div>
+            <div class="badge">${displayStatus}</div>
+          </div>
+          <div class="content">
+            <div class="greeting">Dear ${clientName},</div>
+            <p style="font-size: 13px; color: #cbd5e1; line-height: 1.6;">
+              We are pleased to inform you that your project inquiry <strong>#${inquiry.inquiryNumber}</strong> (<em>${inquiry.title}</em>) has been updated to <strong>${displayStatus}</strong>.
+            </p>
+
+            <div class="card">
+              <div class="row">
+                <span class="label">Inquiry Reference:</span>
+                <span class="val" style="color: #38bdf8; font-family: monospace;">#${inquiry.inquiryNumber}</span>
+              </div>
+              <div class="row">
+                <span class="label">Project Title:</span>
+                <span class="val">${inquiry.title}</span>
+              </div>
+              <div class="row">
+                <span class="label">Previous Status:</span>
+                <span class="val" style="color: #94a3b8;">${displayPrevStatus}</span>
+              </div>
+              <div class="row">
+                <span class="label">New Status:</span>
+                <span class="val" style="color: ${statusColor}; font-weight: bold;">${displayStatus}</span>
+              </div>
+              ${inquiry.budget ? `
+              <div class="row">
+                <span class="label">Estimated Budget:</span>
+                <span class="val" style="color: #10b981;">${inquiry.budget}</span>
+              </div>
+              ` : ''}
+              <div class="row">
+                <span class="label">Date & Time:</span>
+                <span class="val" style="color: #94a3b8;">${updateDate}</span>
+              </div>
+            </div>
+
+            ${notes ? `
+              <div class="message-box">
+                <div style="font-size: 11px; font-weight: bold; color: #38bdf8; text-transform: uppercase; margin-bottom: 4px;">Update Notes from Engineering & Account Team:</div>
+                ${notes}
+              </div>
+            ` : ''}
+
+            ${newStatus === 'COMPLETED' ? `
+              <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 14px; text-align: center; color: #10b981; font-weight: 600; font-size: 13px; margin: 16px 0;">
+                🎉 Congratulations! Your inquiry deliverables and specifications have been successfully finalized.
+              </div>
+            ` : ''}
+
+            <a href="${inquiryUrl}" class="cta-btn">View Inquiry & Proposal Status &rarr;</a>
+          </div>
+          <div class="footer">
+            Special Tech • Enterprise AI & Full-Stack Solutions<br>
+            If you have questions regarding this milestone, please reply directly or contact support@specialtech.com.
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    if (!config.isConfigured) {
+      console.warn(`[Email Warning] SMTP not configured. Inquiry status email cannot be sent to ${customer.email}.`);
+      return {
+        success: false,
+        status: 'Failed',
+        provider: 'Resend SMTP',
+        error: 'SMTP host, user, or password is not configured in .env or Admin Settings.',
+        recipient: customer.email.trim(),
+        maskedRecipient: maskEmail(customer.email.trim()),
+      };
+    }
+
+    const transporter = await createSMTPTransporter();
+    if (!transporter) {
+      return {
+        success: false,
+        status: 'Failed',
+        provider: 'Resend SMTP',
+        error: 'Could not initialize SMTP transporter with current configuration',
+        recipient: customer.email.trim(),
+        maskedRecipient: maskEmail(customer.email.trim()),
+      };
+    }
+
+    try {
+      const recipientEmail = customer.email.trim();
+      const info = await transporter.sendMail({
+        from: config.from,
+        to: recipientEmail,
+        subject: `[Special Tech] Project Inquiry Update: #${inquiry.inquiryNumber} is now ${displayStatus}`,
+        html: statusHtml,
+      });
+
+      console.log(`[Email Notice] Inquiry status email accepted by provider for ${recipientEmail} (${info.messageId})`);
+      return {
+        success: true,
+        status: 'Sent',
+        provider: 'Resend SMTP',
+        messageId: info.messageId,
+        recipient: recipientEmail,
+        maskedRecipient: maskEmail(recipientEmail),
+      };
+    } catch (sendErr) {
+      const errMsg = sendErr.message || '';
+      let cleanError = errMsg;
+
+      if (sendErr.responseCode === 550 || /550|only send testing emails|testing email address/i.test(errMsg)) {
+        cleanError = `Resend Testing Mode (550): Account is currently in testing mode and can only deliver to the verified account email (${config.adminEmail || 'naniabdi2504@gmail.com'}). To send to external customer domains, verify your domain at https://resend.com/domains.`;
+        console.warn(`[Email Notice] Customer email for inquiry "${inquiry.inquiryNumber}" rejected: ${cleanError}`);
+      } else if (sendErr.responseCode === 535 || /535|authentication credentials invalid/i.test(errMsg)) {
+        cleanError = 'SMTP Authentication Failure (535): Invalid Resend credentials. Please verify your SMTP_PASS / API Key.';
+      } else if (/timeout|ETIMEDOUT|ECONNREFUSED/i.test(errMsg)) {
+        cleanError = `SMTP Server Unreachable: Connection timed out attempting to reach ${config.host}:${config.port}.`;
+      }
+
+      console.warn(`[Email Warning] Inquiry status email failed for ${customer.email}:`, cleanError);
+      return {
+        success: false,
+        status: 'Failed',
+        provider: 'Resend SMTP',
+        error: cleanError,
+        rawError: errMsg,
+        recipient: customer.email.trim(),
+        maskedRecipient: maskEmail(customer.email.trim()),
+      };
+    }
+  } catch (err) {
+    console.error('[Email Service Error in sendInquiryStatusEmail]:', err.message);
+    return {
+      success: false,
+      status: 'Failed',
+      provider: 'Resend SMTP',
+      error: err.message,
+      recipient: customer?.email || null,
+      maskedRecipient: maskEmail(customer?.email || ''),
+    };
+  }
+};
+
+/**
  * Send customer notification email when their project status changes
  */
 export const sendProjectStatusEmail = async ({

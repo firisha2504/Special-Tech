@@ -1,8 +1,8 @@
 import prisma from '../config/db.js';
 import { customerInquirySchema } from '../validators/schemas.js';
 import { generateSpecificationPDF } from '../services/pdf/pdfService.js';
-import { sendInquiryNotifications } from '../services/email/emailService.js';
-import { notifyNewInquiry } from '../services/notification/notificationService.js';
+import { sendInquiryNotifications, sendInquiryStatusEmail, maskEmail } from '../services/email/emailService.js';
+import { notifyNewInquiry, notifyInquiryStatusChange } from '../services/notification/notificationService.js';
 
 export const submitInquiry = async (req, res, next) => {
   try {
@@ -169,7 +169,28 @@ export const getInquiryById = async (req, res, next) => {
 export const updateInquiryStatus = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { status, internalNotes, assignedToUserId, priority } = req.body;
+    const {
+      status,
+      internalNotes,
+      assignedToUserId,
+      priority,
+      forceNotify = false,
+      dispatchNotification = false,
+    } = req.body;
+
+    const current = await prisma.inquiry.findUnique({
+      where: { id },
+      include: { customer: true },
+    });
+
+    if (!current) {
+      return res.status(404).json({ success: false, message: 'Inquiry not found' });
+    }
+
+    const previousStatus = current.status;
+    const targetStatus = status || current.status;
+    const isStatusChanging = Boolean(status && status.trim().toUpperCase() !== (current.status || '').trim().toUpperCase());
+    const shouldDispatch = isStatusChanging || Boolean(forceNotify) || Boolean(dispatchNotification);
 
     const updated = await prisma.inquiry.update({
       where: { id },
@@ -182,17 +203,194 @@ export const updateInquiryStatus = async (req, res, next) => {
       include: { customer: true, assignedTo: true },
     });
 
-    await prisma.activityLog.create({
+    let deliveryReport = {
+      duplicateSkipped: !shouldDispatch,
+      inApp: { success: true, status: shouldDispatch ? 'DELIVERED' : 'skipped' },
+      email: { success: true, status: shouldDispatch ? 'sent' : 'skipped' },
+    };
+
+    if (shouldDispatch) {
+      deliveryReport = await notifyInquiryStatusChange({
+        inquiry: updated,
+        customer: updated.customer,
+        previousStatus: isStatusChanging ? previousStatus : (current.status || 'NEW'),
+        newStatus: targetStatus,
+        notes: internalNotes?.trim() || '',
+        changedBy: req.user,
+        forceNotify: true,
+      });
+
+      await prisma.activityLog.create({
+        data: {
+          userId: req.user?.id,
+          action: isStatusChanging ? 'INQUIRY_STATUS_CHANGED' : 'INQUIRY_NOTIFICATION_DISPATCHED',
+          entityType: 'INQUIRY',
+          entityId: id,
+          details: {
+            previousStatus,
+            newStatus: targetStatus,
+            priority,
+            delivery: deliveryReport,
+          },
+        },
+      });
+    } else {
+      await prisma.activityLog.create({
+        data: {
+          userId: req.user?.id,
+          action: 'INQUIRY_UPDATED',
+          entityType: 'INQUIRY',
+          entityId: id,
+          details: { status, priority },
+        },
+      });
+    }
+
+    res.json({
+      success: true,
+      statusChanged: isStatusChanging,
+      message: isStatusChanging
+        ? `Inquiry status updated to ${targetStatus}`
+        : 'Inquiry updated and notification dispatched successfully',
+      data: updated,
+      delivery: {
+        ...deliveryReport,
+        skipped: !shouldDispatch,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const retryInquiryEmailNotification = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { notes, force = false } = req.body || {};
+
+    const inquiry = await prisma.inquiry.findUnique({
+      where: { id },
+      include: { customer: true },
+    });
+
+    if (!inquiry) {
+      return res.status(404).json({ success: false, message: 'Inquiry not found' });
+    }
+
+    if (!inquiry.customer) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot send email: No registered customer is linked to this inquiry.',
+      });
+    }
+
+    if (!inquiry.customer.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inquiry.customer.email.trim())) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot send email: Customer "${inquiry.customer.name}" does not have a valid registered email address.`,
+      });
+    }
+
+    // Check duplicate prevention
+    if (!force) {
+      const existingSuccess = await prisma.notification.findFirst({
+        where: {
+          customerId: inquiry.customer.id,
+          channel: 'EMAIL',
+          deliveryStatus: 'SENT',
+          deliveryDetails: {
+            path: ['inquiryId'],
+            equals: inquiry.id,
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (
+        existingSuccess &&
+        existingSuccess.deliveryDetails?.newStatus?.toUpperCase() === (inquiry.status || '').toUpperCase()
+      ) {
+        return res.status(409).json({
+          success: false,
+          alreadyDelivered: true,
+          message: `Email notification for status "${inquiry.status}" was already accepted by email provider (Message ID: ${existingSuccess.deliveryDetails?.providerMessageId || 'Confirmed'}). Duplicate delivery prevented.`,
+          delivery: {
+            success: true,
+            status: 'Already Sent',
+            messageId: existingSuccess.deliveryDetails?.providerMessageId,
+            maskedRecipient: existingSuccess.deliveryDetails?.maskedRecipientEmail || maskEmail(inquiry.customer.email),
+          },
+        });
+      }
+    }
+
+    const emailRes = await sendInquiryStatusEmail({
+      customer: inquiry.customer,
+      inquiry,
+      previousStatus: null,
+      newStatus: inquiry.status,
+      notes: notes !== undefined ? notes : (inquiry.internalNotes || ''),
+    });
+
+    const emailDeliveryStatus = emailRes.success ? 'SENT' : 'FAILED';
+
+    const notifRecord = await prisma.notification.create({
       data: {
-        userId: req.user?.id,
-        action: 'INQUIRY_UPDATED',
-        entityType: 'INQUIRY',
-        entityId: id,
-        details: { status, priority },
+        customerId: inquiry.customer.id,
+        title: `Email Retry: Inquiry ${inquiry.status}`,
+        message: emailRes.success
+          ? `Retry email accepted by provider for ${emailRes.maskedRecipient || inquiry.customer.email} (Inquiry #${inquiry.inquiryNumber}).`
+          : `Retry email delivery failed for ${emailRes.maskedRecipient || inquiry.customer.email}: ${emailRes.error}`,
+        type: 'inquiry_status_change',
+        channel: 'EMAIL',
+        deliveryStatus: emailDeliveryStatus,
+        deliveryDetails: {
+          customerId: inquiry.customer.id,
+          inquiryId: inquiry.id,
+          inquiryNumber: inquiry.inquiryNumber,
+          recipientEmail: inquiry.customer.email,
+          maskedRecipientEmail: emailRes.maskedRecipient || maskEmail(inquiry.customer.email),
+          notificationType: 'inquiry_status_change_retry',
+          previousStatus: null,
+          newStatus: inquiry.status,
+          deliveryStatus: emailDeliveryStatus,
+          provider: emailRes.provider || 'Resend SMTP',
+          providerMessageId: emailRes.messageId || null,
+          errorMessage: emailRes.error || null,
+          isRetry: true,
+          attemptAt: new Date().toISOString(),
+        },
+        link: `/admin?tab=inquiries&id=${inquiry.id}`,
+        isRead: true,
       },
     });
 
-    res.json({ success: true, message: 'Inquiry updated successfully', data: updated });
+    await prisma.activityLog.create({
+      data: {
+        userId: req.user?.id,
+        action: 'INQUIRY_EMAIL_RETRY',
+        entityType: 'INQUIRY',
+        entityId: inquiry.id,
+        details: {
+          status: inquiry.status,
+          success: emailRes.success,
+          recipient: emailRes.maskedRecipient || maskEmail(inquiry.customer.email),
+          providerMessageId: emailRes.messageId || null,
+          error: emailRes.error || null,
+        },
+      },
+    });
+
+    return res.json({
+      success: emailRes.success,
+      message: emailRes.success
+        ? `Customer email successfully accepted by provider for ${emailRes.maskedRecipient || maskEmail(inquiry.customer.email)}`
+        : `Email delivery failed: ${emailRes.error}`,
+      delivery: {
+        ...emailRes,
+        notificationId: notifRecord.id,
+      },
+    });
   } catch (err) {
     next(err);
   }

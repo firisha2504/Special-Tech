@@ -1,5 +1,5 @@
 import prisma from '../../config/db.js';
-import { sendProjectStatusEmail, maskEmail } from '../email/emailService.js';
+import { sendProjectStatusEmail, sendInquiryStatusEmail, maskEmail } from '../email/emailService.js';
 import { sendSMSNotification } from '../sms/smsService.js';
 
 /**
@@ -192,6 +192,191 @@ export const notifyNewDemoRequest = async (demoRequest) => {
       customerEmail: demoRequest.email,
     },
   });
+};
+
+/**
+ * Automatically notify customer when their project inquiry status changes in the CRM
+ */
+export const notifyInquiryStatusChange = async ({
+  inquiry,
+  customer,
+  previousStatus,
+  newStatus,
+  notes = '',
+  changedBy = null,
+  forceNotify = false,
+}) => {
+  if (!forceNotify && previousStatus && previousStatus.trim().toUpperCase() === newStatus.trim().toUpperCase()) {
+    console.log(`[Notification Notice] Inquiry status unchanged (${newStatus}). Skipping duplicate notifications.`);
+    return {
+      duplicateSkipped: true,
+      reason: 'Inquiry status did not change',
+      inApp: { success: true, status: 'skipped' },
+      email: { success: true, status: 'skipped' },
+    };
+  }
+
+  const deliveryReport = {
+    duplicateSkipped: false,
+    inApp: { success: false, status: 'failed' },
+    email: { success: false, status: 'failed' },
+  };
+
+  let notif = null;
+
+  // 1. In-App Notification for customer
+  if (customer?.id) {
+    const type = newStatus === 'COMPLETED' ? 'success' : newStatus === 'CANCELLED' ? 'error' : 'info';
+    notif = await createNotification({
+      title: `Inquiry Status Updated: ${newStatus}`,
+      message: `Your project inquiry #${inquiry.inquiryNumber} ("${inquiry.title}") is now "${newStatus}".${notes ? ` Note: ${notes}` : ''}`,
+      type,
+      link: `/admin?tab=inquiries&id=${inquiry.id}`,
+      customerId: customer.id,
+      channel: 'IN_APP',
+      deliveryStatus: 'DELIVERED',
+      metadata: {
+        inquiryId: inquiry.id,
+        inquiryNumber: inquiry.inquiryNumber,
+        previousStatus: previousStatus || 'NEW',
+        newStatus,
+        notes: notes || '',
+        changedById: changedBy?.id || null,
+        changedByName: changedBy?.name || 'Administrator',
+      },
+    });
+
+    deliveryReport.inApp = {
+      success: Boolean(notif),
+      status: notif ? 'DELIVERED' : 'FAILED',
+      notificationId: notif?.id || null,
+    };
+  }
+
+  // 2. Email Notification to Customer
+  if (!customer) {
+    deliveryReport.email = {
+      success: false,
+      status: 'Failed',
+      provider: 'Resend SMTP',
+      error: 'Inquiry has no registered customer linked.',
+      recipient: null,
+      maskedRecipient: null,
+    };
+  } else if (!customer.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email.trim())) {
+    const errorMsg = 'Customer has no valid registered email address.';
+    deliveryReport.email = {
+      success: false,
+      status: 'Failed',
+      provider: 'Resend SMTP',
+      error: errorMsg,
+      recipient: customer.email || null,
+      maskedRecipient: customer.email ? maskEmail(customer.email) : null,
+    };
+
+    if (customer.id) {
+      await prisma.notification.create({
+        data: {
+          customerId: customer.id,
+          title: `Email: Inquiry ${newStatus} (Failed)`,
+          message: `Email delivery to customer failed: ${errorMsg}`,
+          type: 'inquiry_status_change',
+          channel: 'EMAIL',
+          deliveryStatus: 'FAILED',
+          deliveryDetails: {
+            customerId: customer.id,
+            inquiryId: inquiry.id,
+            inquiryNumber: inquiry.inquiryNumber,
+            recipientEmail: customer.email || null,
+            maskedRecipientEmail: customer.email ? maskEmail(customer.email) : null,
+            notificationType: 'inquiry_status_change',
+            previousStatus: previousStatus || 'NEW',
+            newStatus,
+            deliveryStatus: 'FAILED',
+            provider: 'Resend SMTP',
+            providerMessageId: null,
+            errorMessage: errorMsg,
+            attemptAt: new Date().toISOString(),
+          },
+          link: `/admin?tab=inquiries&id=${inquiry.id}`,
+          isRead: true,
+        },
+      });
+    }
+  } else {
+    // Customer has a valid email address
+    const emailRes = await sendInquiryStatusEmail({
+      customer,
+      inquiry,
+      previousStatus,
+      newStatus,
+      notes,
+    });
+
+    deliveryReport.email = emailRes;
+
+    const emailDeliveryStatus = emailRes.success ? 'SENT' : 'FAILED';
+    const emailNotifRecord = await prisma.notification.create({
+      data: {
+        customerId: customer.id,
+        title: `Email: Inquiry ${newStatus}`,
+        message: emailRes.success
+          ? `Status update email delivered to provider for ${emailRes.maskedRecipient || customer.email} (Inquiry #${inquiry.inquiryNumber}).`
+          : `Status update email delivery failed for ${emailRes.maskedRecipient || customer.email}: ${emailRes.error}`,
+        type: 'inquiry_status_change',
+        channel: 'EMAIL',
+        deliveryStatus: emailDeliveryStatus,
+        deliveryDetails: {
+          customerId: customer.id,
+          inquiryId: inquiry.id,
+          inquiryNumber: inquiry.inquiryNumber,
+          recipientEmail: customer.email,
+          maskedRecipientEmail: emailRes.maskedRecipient || maskEmail(customer.email),
+          notificationType: 'inquiry_status_change',
+          previousStatus: previousStatus || 'NEW',
+          newStatus,
+          deliveryStatus: emailDeliveryStatus,
+          provider: emailRes.provider || 'Resend SMTP',
+          providerMessageId: emailRes.messageId || null,
+          errorMessage: emailRes.error || null,
+          attemptAt: new Date().toISOString(),
+        },
+        link: `/admin?tab=inquiries&id=${inquiry.id}`,
+        metadata: {
+          inquiryId: inquiry.id,
+          inquiryNumber: inquiry.inquiryNumber,
+          previousStatus,
+          newStatus,
+          notes: notes || '',
+        },
+        isRead: true,
+      },
+    });
+
+    deliveryReport.email.notificationId = emailNotifRecord.id;
+
+    if (notif?.id) {
+      await prisma.notification.update({
+        where: { id: notif.id },
+        data: {
+          deliveryDetails: {
+            inApp: 'DELIVERED',
+            email: {
+              recipient: customer.email,
+              maskedRecipient: emailRes.maskedRecipient || maskEmail(customer.email),
+              status: emailDeliveryStatus,
+              messageId: emailRes.messageId || null,
+              error: emailRes.error || null,
+              attemptAt: new Date().toISOString(),
+              notificationId: emailNotifRecord.id,
+            },
+          },
+        },
+      });
+    }
+  }
+
+  return deliveryReport;
 };
 
 /**

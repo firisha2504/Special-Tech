@@ -146,6 +146,10 @@ test('SPECIAL TECH: Comprehensive Verification of Email, CORS, and Inquiry Valid
     assert.strictEqual(savedInquiry.title, 'Next-Gen Autonomous Infrastructure');
     assert.strictEqual(savedInquiry.customer.email, uniqueEmail);
     assert.strictEqual(savedInquiry.customer.name, 'Marcus Wright');
+
+    // Clean up test records
+    await prisma.inquiry.delete({ where: { id: body.inquiryId } }).catch(() => {});
+    await prisma.customer.delete({ where: { id: savedInquiry.customerId } }).catch(() => {});
   });
 
   // -------------------------------------------------------------
@@ -186,6 +190,10 @@ test('SPECIAL TECH: Comprehensive Verification of Email, CORS, and Inquiry Valid
     assert.strictEqual(secondResult.success, true);
     assert.strictEqual(secondResult.skipped, true);
     assert.ok(secondResult.reason.includes('Duplicate notification prevented'));
+
+    // Clean up test records
+    await prisma.inquiry.delete({ where: { id: inquiry.id } }).catch(() => {});
+    await prisma.customer.delete({ where: { id: customer.id } }).catch(() => {});
   });
 
   await t.test('Email: SMTP error must NEVER delete or roll back a saved inquiry in PostgreSQL', async () => {
@@ -212,5 +220,9 @@ test('SPECIAL TECH: Comprehensive Verification of Email, CORS, and Inquiry Valid
     const check = await prisma.inquiry.findUnique({ where: { id: inquiry.id } });
     assert.ok(check, 'Inquiry must remain in PostgreSQL database despite email outcome');
     assert.strictEqual(check.title, 'Fault-Tolerant Architecture');
+
+    // Clean up test records
+    await prisma.inquiry.delete({ where: { id: inquiry.id } }).catch(() => {});
+    await prisma.customer.delete({ where: { id: customer.id } }).catch(() => {});
   });
 });
