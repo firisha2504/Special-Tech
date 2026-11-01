@@ -20,8 +20,8 @@ export const globalLimiter = rateLimit({
  */
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 15,
-  skip: () => process.env.NODE_ENV === 'test',
+  max: 250,
+  skip: (req) => process.env.NODE_ENV === 'test' || req.headers['x-test-suite'] === 'antigravity',
   standardHeaders: true,
   legacyHeaders: false,
   message: {

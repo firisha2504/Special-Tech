@@ -12,7 +12,18 @@ describe('Customer Project Email Notification System Verification', () => {
   let verifiedProject = null;
   let externalProject = null;
 
+  let originalProvider = 'resend';
+
   before(async () => {
+    // 0. Ensure Resend provider is active for Resend testing mode test suite
+    const currentProviderSetting = await prisma.adminSetting.findUnique({ where: { key: 'smtp_provider' } });
+    originalProvider = currentProviderSetting?.value || 'resend';
+    await prisma.adminSetting.upsert({
+      where: { key: 'smtp_provider' },
+      update: { value: 'resend' },
+      create: { key: 'smtp_provider', value: 'resend' },
+    });
+
     // 1. Authenticate as Admin
     const loginRes = await fetch(`${BASE_URL}/auth/login`, {
       method: 'POST',
@@ -88,6 +99,13 @@ describe('Customer Project Email Notification System Verification', () => {
   });
 
   after(async () => {
+    // Restore original provider setting
+    await prisma.adminSetting.upsert({
+      where: { key: 'smtp_provider' },
+      update: { value: originalProvider },
+      create: { key: 'smtp_provider', value: originalProvider },
+    });
+
     // Cleanup created test projects and associated notification/history records
     if (verifiedProject?.id) {
       await prisma.notification.deleteMany({ where: { projectId: verifiedProject.id } });
@@ -185,6 +203,8 @@ describe('Customer Project Email Notification System Verification', () => {
   });
 
   it('4. Correctly handles provider rejection for unverified external domain and marks status as FAILED', async () => {
+    // Allow brief interval for previous provider socket to close cleanly
+    await new Promise((r) => setTimeout(r, 1500));
     // When sending to an external customer address in Resend testing mode,
     // Resend responds with 550 test mode error.
     // The system MUST NOT claim the email was sent, but mark it as FAILED and record the error.

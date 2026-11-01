@@ -1,5 +1,10 @@
 import prisma from '../../config/db.js';
-import { sendProjectStatusEmail, sendInquiryStatusEmail, maskEmail } from '../email/emailService.js';
+import {
+  sendProjectStatusEmail,
+  sendInquiryStatusEmail,
+  maskEmail,
+  getSMTPConfig,
+} from '../email/emailService.js';
 import { sendSMSNotification } from '../sms/smsService.js';
 
 /**
@@ -254,11 +259,14 @@ export const notifyInquiryStatusChange = async ({
   }
 
   // 2. Email Notification to Customer
+  const activeSmtpConfig = await getSMTPConfig().catch(() => ({ providerName: 'Gmail SMTP' }));
+  const activeProviderName = activeSmtpConfig?.providerName || 'Gmail SMTP';
+
   if (!customer) {
     deliveryReport.email = {
       success: false,
       status: 'Failed',
-      provider: 'Resend SMTP',
+      provider: activeProviderName,
       error: 'Inquiry has no registered customer linked.',
       recipient: null,
       maskedRecipient: null,
@@ -268,7 +276,7 @@ export const notifyInquiryStatusChange = async ({
     deliveryReport.email = {
       success: false,
       status: 'Failed',
-      provider: 'Resend SMTP',
+      provider: activeProviderName,
       error: errorMsg,
       recipient: customer.email || null,
       maskedRecipient: customer.email ? maskEmail(customer.email) : null,
@@ -293,7 +301,7 @@ export const notifyInquiryStatusChange = async ({
             previousStatus: previousStatus || 'NEW',
             newStatus,
             deliveryStatus: 'FAILED',
-            provider: 'Resend SMTP',
+            provider: activeProviderName,
             providerMessageId: null,
             errorMessage: errorMsg,
             attemptAt: new Date().toISOString(),
@@ -336,7 +344,7 @@ export const notifyInquiryStatusChange = async ({
           previousStatus: previousStatus || 'NEW',
           newStatus,
           deliveryStatus: emailDeliveryStatus,
-          provider: emailRes.provider || 'Resend SMTP',
+          provider: emailRes.provider || activeProviderName,
           providerMessageId: emailRes.messageId || null,
           errorMessage: emailRes.error || null,
           attemptAt: new Date().toISOString(),
@@ -450,11 +458,14 @@ export const notifyProjectStatusChange = async ({
   }
 
   // 2. Email Notification
+  const activeSmtpConfig = await getSMTPConfig().catch(() => ({ providerName: 'Gmail SMTP' }));
+  const activeProviderName = activeSmtpConfig?.providerName || 'Gmail SMTP';
+
   if (!customer) {
     deliveryReport.email = {
       success: false,
       status: 'Failed',
-      provider: 'Resend SMTP',
+      provider: activeProviderName,
       error: 'Project has no registered customer associated with it.',
       recipient: null,
       maskedRecipient: null,
@@ -464,7 +475,7 @@ export const notifyProjectStatusChange = async ({
     deliveryReport.email = {
       success: false,
       status: 'Failed',
-      provider: 'Resend SMTP',
+      provider: activeProviderName,
       error: errorMsg,
       recipient: customer.email || null,
       maskedRecipient: customer.email ? maskEmail(customer.email) : null,
@@ -489,7 +500,7 @@ export const notifyProjectStatusChange = async ({
             previousStatus: previousStatus || 'Initiated',
             newStatus,
             deliveryStatus: 'FAILED',
-            provider: 'Resend SMTP',
+            provider: activeProviderName,
             providerMessageId: null,
             errorMessage: errorMsg,
             attemptAt: new Date().toISOString(),
@@ -533,7 +544,7 @@ export const notifyProjectStatusChange = async ({
           previousStatus: previousStatus || 'Initiated',
           newStatus,
           deliveryStatus: emailDeliveryStatus,
-          provider: emailRes.provider || 'Resend SMTP',
+          provider: emailRes.provider || activeProviderName,
           providerMessageId: emailRes.messageId || null,
           errorMessage: emailRes.error || null,
           attemptAt: new Date().toISOString(),

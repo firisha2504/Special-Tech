@@ -43,6 +43,19 @@ describe('Project Image Upload, Static Serving, and Management Test Suite', () =
         where: { id: testProjectId },
       });
     }
+    // Clean up uploaded test files
+    if (uploadedCoverUrl) {
+      const coverFile = path.resolve(backendRoot, uploadedCoverUrl.replace(/^\//, ''));
+      if (fs.existsSync(coverFile)) {
+        try { fs.unlinkSync(coverFile); } catch (e) {}
+      }
+    }
+    if (uploadedScreenshotUrl) {
+      const screenshotFile = path.resolve(backendRoot, uploadedScreenshotUrl.replace(/^\//, ''));
+      if (fs.existsSync(screenshotFile)) {
+        try { fs.unlinkSync(screenshotFile); } catch (e) {}
+      }
+    }
   });
 
   it('1. Upload Rejection: Should reject invalid file types with HTTP 400 and friendly message', async () => {

@@ -2,100 +2,190 @@ import nodemailer from 'nodemailer';
 import prisma from '../../config/db.js';
 
 /**
+ * Helper to determine user-friendly provider display name
+ */
+export const getProviderName = (config) => {
+  if (config?.provider === 'gmail' || config?.host?.toLowerCase().includes('gmail.com')) {
+    return 'Gmail SMTP';
+  }
+  return 'Resend SMTP';
+};
+
+/**
  * Retrieve current SMTP configuration safely
  * Checks PostgreSQL admin_settings first, then falls back to process.env
+ * Fully supports multi-provider setup (Resend SMTP and Gmail SMTP)
  */
 export const getSMTPConfig = async () => {
   try {
-    const [
-      hostSetting,
-      portSetting,
-      userSetting,
-      passSetting,
-      fromSetting,
-      secureSetting,
-      adminEmailSetting,
-      lastStatusSetting,
-      lastConnectedSetting,
-      lastErrorSetting,
-      lastDeliverySetting,
-      companyContactSetting,
-      resendTestRecipientSetting,
-    ] = await Promise.all([
-      prisma.adminSetting.findUnique({ where: { key: 'smtp_host' } }),
-      prisma.adminSetting.findUnique({ where: { key: 'smtp_port' } }),
-      prisma.adminSetting.findUnique({ where: { key: 'smtp_user' } }),
-      prisma.adminSetting.findUnique({ where: { key: 'smtp_pass' } }),
-      prisma.adminSetting.findUnique({ where: { key: 'smtp_from' } }),
-      prisma.adminSetting.findUnique({ where: { key: 'smtp_secure' } }),
-      prisma.adminSetting.findUnique({ where: { key: 'admin_email' } }),
-      prisma.adminSetting.findUnique({ where: { key: 'smtp_last_status' } }),
-      prisma.adminSetting.findUnique({ where: { key: 'smtp_last_connected_at' } }),
-      prisma.adminSetting.findUnique({ where: { key: 'smtp_last_error' } }),
-      prisma.adminSetting.findUnique({ where: { key: 'smtp_last_delivery_status' } }),
-      prisma.adminSetting.findUnique({ where: { key: 'contact_email' } }),
-      prisma.adminSetting.findUnique({ where: { key: 'resend_test_recipient' } }),
-    ]);
+    const settings = await prisma.adminSetting.findMany({
+      where: {
+        OR: [
+          { key: { startsWith: 'smtp' } },
+          { key: 'admin_email' },
+          { key: 'contact_email' },
+          { key: 'resend_test_recipient' },
+        ],
+      },
+    });
 
-    const host = hostSetting !== null ? hostSetting.value : (process.env.SMTP_HOST || '');
-    const rawPort = portSetting !== null ? portSetting.value : process.env.SMTP_PORT;
-    const user = userSetting !== null ? userSetting.value : (process.env.SMTP_USER || '');
-    const pass = passSetting !== null ? passSetting.value : (process.env.SMTP_PASS || process.env.RESEND_API_KEY || '');
-    let from = fromSetting !== null ? fromSetting.value : (process.env.SMTP_FROM || 'Special Tech <onboarding@resend.dev>');
-    const adminEmail = adminEmailSetting?.value || companyContactSetting?.value || process.env.ADMIN_NOTIFICATION_EMAIL || 'admin@specialtech.com';
-    const resendTestRecipient = resendTestRecipientSetting?.value || process.env.RESEND_TEST_RECIPIENT || 'naniabdi2504@gmail.com';
+    const getVal = (k) => settings.find((s) => s.key === k)?.value;
 
-    // If using Resend and the sender is set to unverified specialtech.com, fallback to verified onboarding@resend.dev
-    if (host && host.includes('resend.com') && from.includes('@specialtech.com')) {
-      from = process.env.SMTP_FROM || 'Special Tech <onboarding@resend.dev>';
+    // 1. Determine active provider ('gmail' | 'resend')
+    let provider = getVal('smtp_provider') || process.env.SMTP_PROVIDER;
+    if (!provider) {
+      const activeHost = getVal('smtp_host') || process.env.SMTP_HOST || '';
+      provider = activeHost.toLowerCase().includes('gmail.com') ? 'gmail' : 'resend';
     }
+    provider = provider.toLowerCase() === 'gmail' ? 'gmail' : 'resend';
 
-    let port = Number(rawPort);
-    if (!port || isNaN(port)) {
-      port = 587;
-    }
+    // 2. Resolve Gmail settings
+    const gmailHost = getVal('smtp_gmail_host') || (getVal('smtp_host')?.includes('gmail.com') ? getVal('smtp_host') : '') || 'smtp.gmail.com';
+    const gmailPort = Number(getVal('smtp_gmail_port') || (getVal('smtp_host')?.includes('gmail.com') ? getVal('smtp_port') : '')) || 465;
+    const gmailSecure = getVal('smtp_gmail_secure') !== 'false';
+    const gmailUser = getVal('smtp_gmail_user') || (getVal('smtp_host')?.includes('gmail.com') ? getVal('smtp_user') : '') || process.env.GMAIL_USER || '';
+    const rawGmailPass = getVal('smtp_gmail_pass') || (getVal('smtp_host')?.includes('gmail.com') ? getVal('smtp_pass') : '') || process.env.GMAIL_APP_PASSWORD || '';
+    const gmailPass = rawGmailPass ? rawGmailPass.replace(/\s+/g, '') : '';
+    const gmailFromName = getVal('smtp_gmail_from_name') || 'Special Tech';
+    const gmailFromEmail = getVal('smtp_gmail_from_email') || (getVal('smtp_host')?.includes('gmail.com') ? getVal('smtp_user') : '') || gmailUser || '';
+    const gmailFrom = getVal('smtp_gmail_from') || (gmailFromEmail ? `${gmailFromName} <${gmailFromEmail}>` : 'Special Tech');
 
-    let secure;
-    if (secureSetting?.value !== undefined) {
-      secure = secureSetting.value === 'true';
-    } else if (process.env.SMTP_SECURE !== undefined) {
-      secure = process.env.SMTP_SECURE === 'true';
+    // 3. Resolve Resend settings
+    let resendHost;
+    if (process.env.SMTP_HOST === '') {
+      resendHost = '';
+    } else if (getVal('smtp_host') !== undefined && !getVal('smtp_host')?.includes('gmail.com')) {
+      resendHost = getVal('smtp_host');
     } else {
-      secure = port === 465;
+      resendHost = getVal('smtp_resend_host') || process.env.SMTP_HOST || 'smtp.resend.com';
     }
+
+    const rawResendPort = getVal('smtp_resend_port') || (!getVal('smtp_host')?.includes('gmail.com') ? getVal('smtp_port') : '') || process.env.SMTP_PORT || '465';
+    let resendPort = Number(rawResendPort);
+    if (!resendPort || isNaN(resendPort)) resendPort = 465;
+    const resendSecure = resendPort === 465;
+
+    const resendUser = (!getVal('smtp_host')?.includes('gmail.com') && getVal('smtp_user') !== undefined)
+      ? getVal('smtp_user')
+      : (getVal('smtp_resend_user') || process.env.SMTP_USER || 'resend');
+
+    let resendPass;
+    if (process.env.SMTP_PASS === '') {
+      resendPass = '';
+    } else if (getVal('smtp_pass') !== undefined && !getVal('smtp_host')?.includes('gmail.com')) {
+      resendPass = getVal('smtp_pass');
+    } else {
+      resendPass = getVal('smtp_resend_pass') || process.env.SMTP_PASS || process.env.RESEND_API_KEY || '';
+    }
+
+    let resendFrom = getVal('smtp_resend_from') || (!getVal('smtp_host')?.includes('gmail.com') ? getVal('smtp_from') : '') || process.env.SMTP_FROM || 'Special Tech <onboarding@resend.dev>';
+    if (resendHost && resendHost.includes('resend.com') && resendFrom.includes('@specialtech.com')) {
+      resendFrom = 'Special Tech <onboarding@resend.dev>';
+    }
+
+    // 4. Resolve Active Configuration
+    let host, port, secure, user, pass, from, fromName, fromEmail, providerName;
+    if (provider === 'gmail') {
+      providerName = 'Gmail SMTP';
+      host = gmailHost;
+      port = gmailPort;
+      secure = gmailSecure;
+      user = gmailUser;
+      pass = gmailPass;
+      fromName = gmailFromName;
+      fromEmail = gmailFromEmail;
+      from = gmailFrom;
+    } else {
+      providerName = 'Resend SMTP';
+      host = resendHost;
+      port = resendPort;
+      secure = resendSecure;
+      user = resendUser;
+      pass = resendPass;
+      from = resendFrom;
+      fromName = 'Special Tech';
+      const fromMatch = resendFrom.match(/<([^>]+)>/);
+      fromEmail = fromMatch ? fromMatch[1] : resendFrom;
+    }
+
+    const adminEmail = getVal('admin_email') || getVal('contact_email') || process.env.ADMIN_NOTIFICATION_EMAIL || 'admin@specialtech.com';
+    const resendTestRecipient = getVal('resend_test_recipient') || process.env.RESEND_TEST_RECIPIENT || 'naniabdi2504@gmail.com';
 
     const hasPass = !!(pass && pass.trim());
     const isConfigured = !!(host && host.trim() && user && user.trim() && hasPass);
 
     return {
+      provider,
+      providerName,
       host: host.trim(),
       port,
       secure,
       user: user.trim(),
       from: from.trim(),
+      fromName,
+      fromEmail: fromEmail ? fromEmail.trim() : '',
       adminEmail: adminEmail.trim(),
       resendTestRecipient: resendTestRecipient.trim(),
       hasPass,
       isConfigured,
       rawPass: pass.trim(),
-      lastStatus: lastStatusSetting?.value || (isConfigured ? 'untested' : 'not_configured'),
-      lastConnectedAt: lastConnectedSetting?.value || null,
-      lastError: lastErrorSetting?.value || null,
-      lastDeliveryStatus: lastDeliverySetting?.value || null,
+      lastStatus: getVal('smtp_last_status') || (isConfigured ? 'untested' : 'not_configured'),
+      lastConnectedAt: getVal('smtp_last_connected_at') || getVal('smtp_last_auth_at') || null,
+      lastError: getVal('smtp_last_error') || getVal('smtp_last_auth_error') || null,
+      lastDeliveryStatus: getVal('smtp_last_delivery_status') || null,
+      lastAuthStatus: getVal('smtp_last_auth_status') || null,
+      lastAuthAt: getVal('smtp_last_auth_at') || null,
+      lastAuthLatency: getVal('smtp_last_auth_latency') ? Number(getVal('smtp_last_auth_latency')) : null,
+      testEmailStatus: getVal('smtp_test_email_status') || null,
+      testEmailAt: getVal('smtp_test_email_at') || null,
+      testEmailRecipient: getVal('smtp_test_email_recipient') || null,
+      testEmailMessageId: getVal('smtp_test_email_message_id') || null,
+      testDeliveryStatus: getVal('smtp_test_delivery_status') || null,
+      testDeliveryAt: getVal('smtp_test_delivery_at') || null,
+      lastErrorType: getVal('smtp_last_error_type') || null,
+      // Preserved sub-configs for provider tabs
+      resendConfig: {
+        provider: 'resend',
+        host: resendHost.trim(),
+        port: resendPort,
+        secure: resendSecure,
+        user: resendUser.trim(),
+        from: resendFrom.trim(),
+        hasPass: !!(resendPass && resendPass.trim()),
+        rawPass: (resendPass || '').trim(),
+        isConfigured: !!(resendHost && resendUser && resendPass && resendPass.trim()),
+      },
+      gmailConfig: {
+        provider: 'gmail',
+        host: gmailHost.trim(),
+        port: gmailPort,
+        secure: gmailSecure,
+        user: gmailUser.trim(),
+        fromName: gmailFromName,
+        fromEmail: gmailFromEmail.trim(),
+        from: gmailFrom.trim(),
+        hasPass: !!(gmailPass && gmailPass.trim()),
+        rawPass: (gmailPass || '').trim(),
+        isConfigured: !!(gmailUser && gmailUser.trim() && gmailPass && gmailPass.trim()),
+      },
     };
   } catch (err) {
     console.error('[Email Config Error]:', err.message);
-    const host = process.env.SMTP_HOST || '';
-    const port = Number(process.env.SMTP_PORT) || 587;
-    const user = process.env.SMTP_USER || '';
+    const host = process.env.SMTP_HOST || 'smtp.resend.com';
+    const port = Number(process.env.SMTP_PORT) || 465;
+    const user = process.env.SMTP_USER || 'resend';
     const pass = process.env.SMTP_PASS || process.env.RESEND_API_KEY || '';
     const hasPass = !!(pass && pass.trim());
     return {
+      provider: 'resend',
+      providerName: 'Resend SMTP',
       host,
       port,
       secure: port === 465,
       user,
-      from: process.env.SMTP_FROM || 'Special Tech <contact@specialtech.com>',
+      from: process.env.SMTP_FROM || 'Special Tech <onboarding@resend.dev>',
+      fromName: 'Special Tech',
+      fromEmail: 'onboarding@resend.dev',
       adminEmail: process.env.ADMIN_NOTIFICATION_EMAIL || 'admin@specialtech.com',
       resendTestRecipient: process.env.RESEND_TEST_RECIPIENT || 'naniabdi2504@gmail.com',
       hasPass,
@@ -105,6 +195,38 @@ export const getSMTPConfig = async () => {
       lastConnectedAt: null,
       lastError: null,
       lastDeliveryStatus: null,
+      lastAuthStatus: 'NOT_CONFIGURED',
+      lastAuthAt: null,
+      lastAuthLatency: null,
+      testEmailStatus: null,
+      testEmailAt: null,
+      testEmailRecipient: null,
+      testEmailMessageId: null,
+      testDeliveryStatus: null,
+      testDeliveryAt: null,
+      lastErrorType: null,
+      resendConfig: {
+        provider: 'resend',
+        host,
+        port,
+        secure: port === 465,
+        user,
+        from: process.env.SMTP_FROM || 'Special Tech <onboarding@resend.dev>',
+        hasPass,
+        isConfigured: hasPass,
+      },
+      gmailConfig: {
+        provider: 'gmail',
+        host: 'smtp.gmail.com',
+        port: 465,
+        secure: true,
+        user: '',
+        fromName: 'Special Tech',
+        fromEmail: '',
+        from: 'Special Tech',
+        hasPass: false,
+        isConfigured: false,
+      },
     };
   }
 };
@@ -125,7 +247,7 @@ export const maskEmail = (email) => {
 /**
  * Persist email operational diagnostic in database
  */
-const recordSMTPDiagnostic = async (status, errorMessage = null) => {
+const recordSMTPDiagnostic = async (status, errorMessage = null, extraUpdates = []) => {
   try {
     const updates = [
       prisma.adminSetting.upsert({
@@ -133,18 +255,25 @@ const recordSMTPDiagnostic = async (status, errorMessage = null) => {
         update: { value: status },
         create: { key: 'smtp_last_status', value: status },
       }),
+      ...extraUpdates,
     ];
     if (status === 'connected') {
+      const nowIso = new Date().toISOString();
       updates.push(
         prisma.adminSetting.upsert({
           where: { key: 'smtp_last_connected_at' },
-          update: { value: new Date().toISOString() },
-          create: { key: 'smtp_last_connected_at', value: new Date().toISOString() },
+          update: { value: nowIso },
+          create: { key: 'smtp_last_connected_at', value: nowIso },
         }),
         prisma.adminSetting.upsert({
           where: { key: 'smtp_last_error' },
           update: { value: '' },
           create: { key: 'smtp_last_error', value: '' },
+        }),
+        prisma.adminSetting.upsert({
+          where: { key: 'smtp_last_error_type' },
+          update: { value: '' },
+          create: { key: 'smtp_last_error_type', value: '' },
         })
       );
     } else if (errorMessage) {
@@ -165,25 +294,35 @@ const recordSMTPDiagnostic = async (status, errorMessage = null) => {
 /**
  * Create a Nodemailer transporter instance safely
  * Uses STARTTLS on port 587 (secure: false, requireTLS: true)
+ * Or direct SSL on port 465 (secure: true)
+ * Strips whitespace from Google App Passwords automatically
  */
-export const createSMTPTransporter = async () => {
-  const config = await getSMTPConfig();
-  if (!config.isConfigured) {
+export const createSMTPTransporter = async (overrideConfig = null) => {
+  const config = overrideConfig || (await getSMTPConfig());
+  const pass = (config.rawPass || config.pass || '').trim();
+  if (!config.isConfigured && !pass) {
     return null;
   }
 
+  const port = Number(config.port) || 465;
+  const isPort465 = port === 465;
+
+  // Sanitize Google App Passwords (strip internal spaces e.g. "abcd efgh ijkl mnop")
+  const isGmail = config.provider === 'gmail' || config.host?.toLowerCase().includes('gmail.com');
+  const sanitizedPass = isGmail ? pass.replace(/\s+/g, '') : pass;
+
   return nodemailer.createTransport({
     host: config.host,
-    port: config.port,
-    secure: config.secure,
-    requireTLS: config.port === 587,
+    port,
+    secure: isPort465,
+    requireTLS: !isPort465 && port === 587,
     auth: {
       user: config.user,
-      pass: config.rawPass,
+      pass: sanitizedPass,
     },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 10000,
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 15000,
     tls: {
       rejectUnauthorized: true,
       minVersion: 'TLSv1.2',
@@ -192,99 +331,449 @@ export const createSMTPTransporter = async () => {
 };
 
 /**
- * Verify live SMTP server connection
+ * Verify live SMTP server connection (Stage 2: SMTP Authentication Verified)
+ * Supports live verification of current active settings or candidate settings (overrideConfig)
  */
-export const verifySMTPConnection = async () => {
-  const config = await getSMTPConfig();
-  const startTime = Date.now();
+export const verifySMTPConnection = async (overrideConfig = null) => {
+  const baseConfig = await getSMTPConfig();
+  let config = baseConfig;
 
-  if (!config.isConfigured) {
-    await recordSMTPDiagnostic('not_configured', 'SMTP host, user, or password is not configured.');
+  if (overrideConfig) {
+    const overrideProvider = overrideConfig.provider || (overrideConfig.host?.includes('gmail.com') ? 'gmail' : baseConfig.provider);
+    let testPass = (overrideConfig.pass || overrideConfig.rawPass || '').trim();
+    if (!testPass || testPass.includes('•••')) {
+      testPass = overrideProvider === 'gmail'
+        ? (baseConfig.gmailConfig?.hasPass ? baseConfig.gmailConfig.rawPass || baseConfig.rawPass : '')
+        : (baseConfig.resendConfig?.hasPass ? baseConfig.resendConfig.rawPass || baseConfig.rawPass : '');
+    }
+
+    const testPort = Number(overrideConfig.port) || 465;
+    const testSecure = overrideConfig.secure !== undefined ? Boolean(overrideConfig.secure) : testPort === 465;
+
+    config = {
+      ...baseConfig,
+      ...overrideConfig,
+      provider: overrideProvider,
+      providerName: overrideProvider === 'gmail' ? 'Gmail SMTP' : 'Resend SMTP',
+      host: (overrideConfig.host || (overrideProvider === 'gmail' ? 'smtp.gmail.com' : 'smtp.resend.com')).trim(),
+      port: testPort,
+      secure: testSecure,
+      user: (overrideConfig.user || '').trim(),
+      pass: testPass,
+      rawPass: testPass,
+      isConfigured: !!(overrideConfig.user && testPass),
+    };
+  }
+
+  const provider = config.provider === 'gmail' || config.host?.toLowerCase().includes('gmail.com') ? 'gmail' : 'resend';
+  const providerName = provider === 'gmail' ? 'Gmail SMTP' : 'Resend SMTP';
+  const startTime = Date.now();
+  const pass = (config.rawPass || config.pass || '').trim();
+
+  if (!config.host || !config.user || !pass) {
+    const errorMsg = provider === 'gmail'
+      ? 'Gmail SMTP is not configured. Please enter your Gmail address and Google App Password.'
+      : 'Resend SMTP is not configured. Please enter your SMTP User and Resend API Key.';
+
+    await recordSMTPDiagnostic('not_configured', errorMsg, [
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_last_auth_status' },
+        update: { value: 'NOT_CONFIGURED' },
+        create: { key: 'smtp_last_auth_status', value: 'NOT_CONFIGURED' },
+      }),
+    ]);
     return {
       success: false,
       status: 'not_configured',
+      authStatus: 'NOT_CONFIGURED',
+      provider,
+      providerName,
       host: config.host || '(None)',
       port: config.port,
       from: config.from,
-      message: 'SMTP is not configured. Configure SMTP_HOST, SMTP_USER, and SMTP_PASS in .env or Admin Settings.',
+      message: errorMsg,
+      error: errorMsg,
     };
   }
 
   try {
-    const transporter = nodemailer.createTransport({
-      host: config.host,
-      port: config.port,
-      secure: config.secure,
-      requireTLS: config.port === 587,
-      auth: {
-        user: config.user,
-        pass: config.rawPass,
-      },
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 10000,
-      tls: {
-        rejectUnauthorized: true,
-        minVersion: 'TLSv1.2',
-      },
-    });
+    const transporter = await createSMTPTransporter(config);
+    if (!transporter) {
+      throw new Error(`Could not initialize SMTP transporter for ${providerName}`);
+    }
 
     await transporter.verify();
     const latencyMs = Date.now() - startTime;
-    await recordSMTPDiagnostic('connected', null);
+    const nowIso = new Date().toISOString();
+
+    const successMsg = provider === 'gmail'
+      ? 'SMTP authentication successful. Gmail SMTP is ready for email testing.'
+      : 'SMTP authentication successful. Resend SMTP is ready for email testing.';
+
+    await recordSMTPDiagnostic('connected', null, [
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_last_auth_status' },
+        update: { value: 'VERIFIED' },
+        create: { key: 'smtp_last_auth_status', value: 'VERIFIED' },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_last_auth_at' },
+        update: { value: nowIso },
+        create: { key: 'smtp_last_auth_at', value: nowIso },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_last_auth_latency' },
+        update: { value: String(latencyMs) },
+        create: { key: 'smtp_last_auth_latency', value: String(latencyMs) },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_last_auth_error' },
+        update: { value: '' },
+        create: { key: 'smtp_last_auth_error', value: '' },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_last_error' },
+        update: { value: '' },
+        create: { key: 'smtp_last_error', value: '' },
+      }),
+    ]);
 
     return {
       success: true,
       status: 'connected',
+      authStatus: 'VERIFIED',
+      provider,
+      providerName,
       host: config.host,
       port: config.port,
       secure: config.secure,
+      protocol: config.port === 465 ? 'SSL (Port 465)' : 'STARTTLS (Port 587)',
       user: config.user,
       from: config.from,
       latencyMs,
-      message: `SMTP connection to ${config.host}:${config.port} (${config.secure ? 'SSL' : 'STARTTLS'}) verified successfully.`,
+      verifiedAt: nowIso,
+      message: successMsg,
     };
   } catch (err) {
     const latencyMs = Date.now() - startTime;
     const rawMsg = err.message || 'SMTP handshake failed';
+    const nowIso = new Date().toISOString();
 
     let status = 'error';
+    let authStatus = 'FAILED';
+    let errorType = 'GENERAL';
     let cleanMessage = rawMsg;
 
-    // Distinguish 535 authentication failures
-    if (err.responseCode === 535 || /535|invalid login|authentication credentials invalid/i.test(rawMsg)) {
+    // Distinguish 535 authentication failures vs 550 testing restrictions vs connection timeouts
+    if (err.responseCode === 535 || /535|invalid login|authentication credentials invalid|username and password not accepted/i.test(rawMsg)) {
       status = 'auth_failed';
-      cleanMessage = 'SMTP Authentication Failure (535): Invalid credentials. Please verify that SMTP_USER is "resend" (for Resend) and SMTP_PASS is an active Resend API key (re_...).';
+      authStatus = 'AUTH_FAILED';
+      errorType = 'AUTH_FAILED';
+      cleanMessage = provider === 'gmail'
+        ? 'Authentication failed. Check your Gmail address and Google App Password.'
+        : 'Authentication failed. Check your Resend API Key.';
     } else if (err.responseCode === 550 || /550.*only send testing emails/i.test(rawMsg)) {
       status = 'resend_testing_restriction';
+      authStatus = 'RESTRICTED';
+      errorType = 'RESEND_TESTING_MODE';
       cleanMessage = 'Resend Testing Restriction (550): Resend account is in testing mode. Emails can only be delivered to your verified account address.';
-    } else if (/timeout|ETIMEDOUT|ECONNREFUSED/i.test(rawMsg)) {
+    } else if (/timeout|ETIMEDOUT|ECONNREFUSED|ENOTFOUND|EHOSTUNREACH/i.test(rawMsg)) {
       status = 'unreachable';
-      cleanMessage = `SMTP Server Unreachable: Connection timed out attempting to reach ${config.host}:${config.port}.`;
+      authStatus = 'UNREACHABLE';
+      errorType = 'UNREACHABLE';
+      cleanMessage = provider === 'gmail'
+        ? 'Unable to connect to Gmail SMTP. Check your internet connection and SMTP settings.'
+        : 'Unable to connect to Resend SMTP. Check your internet connection and SMTP settings.';
     }
 
-    await recordSMTPDiagnostic(status, cleanMessage);
+    await recordSMTPDiagnostic(status, cleanMessage, [
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_last_auth_status' },
+        update: { value: authStatus },
+        create: { key: 'smtp_last_auth_status', value: authStatus },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_last_auth_at' },
+        update: { value: nowIso },
+        create: { key: 'smtp_last_auth_at', value: nowIso },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_last_auth_latency' },
+        update: { value: String(latencyMs) },
+        create: { key: 'smtp_last_auth_latency', value: String(latencyMs) },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_last_auth_error' },
+        update: { value: cleanMessage },
+        create: { key: 'smtp_last_auth_error', value: cleanMessage },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_last_error_type' },
+        update: { value: errorType },
+        create: { key: 'smtp_last_error_type', value: errorType },
+      }),
+    ]);
 
     return {
       success: false,
       status,
+      authStatus,
+      errorType,
+      provider,
+      providerName,
       host: config.host,
       port: config.port,
       from: config.from,
       latencyMs,
       error: cleanMessage,
       message: cleanMessage,
+      rawError: rawMsg,
     };
   }
 };
 
 /**
- * Send an administrator test verification email
+ * Save SMTP provider settings securely
+ * Preserves previously saved passwords when password input is empty
+ */
+export const saveEmailSettings = async ({
+  provider,
+  // Gmail fields
+  gmailUser,
+  gmailPass,
+  gmailFromName,
+  gmailFromEmail,
+  // Resend fields
+  resendHost,
+  resendPort,
+  resendUser,
+  resendPass,
+  resendFrom,
+  // Common
+  adminEmail,
+}) => {
+  const currentConfig = await getSMTPConfig();
+  const selectedProvider = (provider || 'resend').toLowerCase() === 'gmail' ? 'gmail' : 'resend';
+  const updates = [];
+
+  // Update active provider
+  updates.push(
+    prisma.adminSetting.upsert({
+      where: { key: 'smtp_provider' },
+      update: { value: selectedProvider },
+      create: { key: 'smtp_provider', value: selectedProvider },
+    })
+  );
+
+  if (adminEmail && adminEmail.trim()) {
+    updates.push(
+      prisma.adminSetting.upsert({
+        where: { key: 'admin_email' },
+        update: { value: adminEmail.trim() },
+        create: { key: 'admin_email', value: adminEmail.trim() },
+      })
+    );
+  }
+
+  if (selectedProvider === 'gmail') {
+    if (!gmailUser || !gmailUser.includes('@')) {
+      throw new Error('A valid Gmail address is required for SMTP Username.');
+    }
+    const cleanGmailUser = gmailUser.trim();
+    const cleanFromName = (gmailFromName || 'Special Tech').trim();
+    const cleanFromEmail = (gmailFromEmail || cleanGmailUser).trim();
+    const cleanFrom = `${cleanFromName} <${cleanFromEmail}>`;
+
+    updates.push(
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_gmail_host' },
+        update: { value: 'smtp.gmail.com' },
+        create: { key: 'smtp_gmail_host', value: 'smtp.gmail.com' },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_gmail_port' },
+        update: { value: '465' },
+        create: { key: 'smtp_gmail_port', value: '465' },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_gmail_secure' },
+        update: { value: 'true' },
+        create: { key: 'smtp_gmail_secure', value: 'true' },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_gmail_user' },
+        update: { value: cleanGmailUser },
+        create: { key: 'smtp_gmail_user', value: cleanGmailUser },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_gmail_from_name' },
+        update: { value: cleanFromName },
+        create: { key: 'smtp_gmail_from_name', value: cleanFromName },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_gmail_from_email' },
+        update: { value: cleanFromEmail },
+        create: { key: 'smtp_gmail_from_email', value: cleanFromEmail },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_gmail_from' },
+        update: { value: cleanFrom },
+        create: { key: 'smtp_gmail_from', value: cleanFrom },
+      })
+    );
+
+    // Password resolution: if new password provided, strip spaces and save; if empty, preserve existing
+    let finalPass = currentConfig.gmailConfig?.hasPass ? currentConfig.gmailConfig.rawPass : '';
+    if (gmailPass && gmailPass.trim() && gmailPass !== '••••••••••••••••') {
+      finalPass = gmailPass.trim().replace(/\s+/g, '');
+      updates.push(
+        prisma.adminSetting.upsert({
+          where: { key: 'smtp_gmail_pass' },
+          update: { value: finalPass },
+          create: { key: 'smtp_gmail_pass', value: finalPass },
+        })
+      );
+    }
+
+    if (!finalPass) {
+      throw new Error('Google App Password is required. Please generate an App Password in your Google Account.');
+    }
+
+    // Mirror to active SMTP keys for seamless backward-compatibility across all services
+    updates.push(
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_host' },
+        update: { value: 'smtp.gmail.com' },
+        create: { key: 'smtp_host', value: 'smtp.gmail.com' },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_port' },
+        update: { value: '465' },
+        create: { key: 'smtp_port', value: '465' },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_secure' },
+        update: { value: 'true' },
+        create: { key: 'smtp_secure', value: 'true' },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_user' },
+        update: { value: cleanGmailUser },
+        create: { key: 'smtp_user', value: cleanGmailUser },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_from' },
+        update: { value: cleanFrom },
+        create: { key: 'smtp_from', value: cleanFrom },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_pass' },
+        update: { value: finalPass },
+        create: { key: 'smtp_pass', value: finalPass },
+      })
+    );
+  } else {
+    // Resend provider
+    const host = (resendHost || 'smtp.resend.com').trim();
+    const port = Number(resendPort) || 465;
+    const isPort465 = port === 465;
+    const user = (resendUser || 'resend').trim();
+    const from = (resendFrom || 'Special Tech <onboarding@resend.dev>').trim();
+
+    updates.push(
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_resend_host' },
+        update: { value: host },
+        create: { key: 'smtp_resend_host', value: host },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_resend_port' },
+        update: { value: String(port) },
+        create: { key: 'smtp_resend_port', value: String(port) },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_resend_secure' },
+        update: { value: isPort465 ? 'true' : 'false' },
+        create: { key: 'smtp_resend_secure', value: isPort465 ? 'true' : 'false' },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_resend_user' },
+        update: { value: user },
+        create: { key: 'smtp_resend_user', value: user },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_resend_from' },
+        update: { value: from },
+        create: { key: 'smtp_resend_from', value: from },
+      })
+    );
+
+    let finalPass = currentConfig.resendConfig?.hasPass ? currentConfig.resendConfig.rawPass : '';
+    if (resendPass && resendPass.trim() && resendPass !== '••••••••••••••••') {
+      finalPass = resendPass.trim();
+      updates.push(
+        prisma.adminSetting.upsert({
+          where: { key: 'smtp_resend_pass' },
+          update: { value: finalPass },
+          create: { key: 'smtp_resend_pass', value: finalPass },
+        })
+      );
+    }
+
+    if (!finalPass) {
+      throw new Error('Resend API Key is required.');
+    }
+
+    // Mirror to active SMTP keys
+    updates.push(
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_host' },
+        update: { value: host },
+        create: { key: 'smtp_host', value: host },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_port' },
+        update: { value: String(port) },
+        create: { key: 'smtp_port', value: String(port) },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_secure' },
+        update: { value: isPort465 ? 'true' : 'false' },
+        create: { key: 'smtp_secure', value: isPort465 ? 'true' : 'false' },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_user' },
+        update: { value: user },
+        create: { key: 'smtp_user', value: user },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_from' },
+        update: { value: from },
+        create: { key: 'smtp_from', value: from },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_pass' },
+        update: { value: finalPass },
+        create: { key: 'smtp_pass', value: finalPass },
+      })
+    );
+  }
+
+  await Promise.all(updates);
+  return await getSMTPConfig();
+};
+
+/**
+ * Send an administrator test verification email (Stage 3 & 4)
+ * Subject: Special Tech SMTP Configuration Test
+ * Message: "This is a test email from Special Tech. Your email configuration has been tested successfully."
  */
 export const sendTestEmail = async ({ toEmail }) => {
   const config = await getSMTPConfig();
-  // In testing mode or default, use provided email or the configured permitted test recipient
-  const targetRecipient = toEmail || config.resendTestRecipient || config.adminEmail;
+  const providerName = getProviderName(config);
+  const targetRecipient = toEmail?.trim() || config.resendTestRecipient || config.adminEmail;
+  const testSubject = 'Special Tech SMTP Configuration Test';
+  const testMessageText = 'This is a test email from Special Tech. Your email configuration has been tested successfully.';
 
   if (!targetRecipient || !targetRecipient.includes('@')) {
     return {
@@ -293,29 +782,32 @@ export const sendTestEmail = async ({ toEmail }) => {
     };
   }
 
-  const transporter = await createSMTPTransporter();
+  const transporter = await createSMTPTransporter(config);
   if (!transporter) {
     return {
       success: false,
-      error: 'SMTP credentials are not configured. Please set SMTP_HOST, SMTP_USER, and SMTP_PASS.',
+      error: `SMTP credentials are not configured for ${providerName}. Please configure your credentials first.`,
     };
   }
 
   try {
-    const timestamp = new Date().toLocaleString();
+    const timestamp = new Date().toLocaleString('en-US', { timeZone: 'UTC' }) + ' UTC';
+
     const info = await transporter.sendMail({
       from: config.from,
       to: targetRecipient,
-      subject: `Special Tech SMTP Verification Test — ${timestamp}`,
+      subject: testSubject,
+      text: testMessageText,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #1e293b; background: #ffffff; padding: 32px; border: 1px solid #e2e8f0; border-radius: 12px;">
           <div style="border-bottom: 2px solid #087BFF; padding-bottom: 16px; margin-bottom: 24px;">
             <h1 style="color: #087BFF; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">SPECIAL TECH</h1>
             <p style="color: #64748b; margin: 4px 0 0 0; font-size: 13px;">AI-Powered Software Architecture & Engineering</p>
           </div>
-          <h2 style="color: #0f172a; margin-top: 0; font-size: 18px;">SMTP Integration Test Successful</h2>
-          <p>This automated verification confirms that your <strong>Special Tech</strong> mail dispatch system is connected and operational.</p>
+          <h2 style="color: #0f172a; margin-top: 0; font-size: 18px;">${testSubject}</h2>
+          <p style="font-size: 14px; line-height: 1.6; color: #334155;">${testMessageText}</p>
           <div style="background: #f8fafc; padding: 18px; border-radius: 8px; margin: 20px 0; border: 1px solid #e2e8f0; font-size: 13px;">
+            <p style="margin: 0 0 8px 0;"><strong>Active Provider:</strong> ${providerName}</p>
             <p style="margin: 0 0 8px 0;"><strong>SMTP Server:</strong> ${config.host}:${config.port} (${config.secure ? 'SSL' : 'STARTTLS'})</p>
             <p style="margin: 0 0 8px 0;"><strong>Sender:</strong> ${config.from}</p>
             <p style="margin: 0 0 8px 0;"><strong>Recipient:</strong> ${targetRecipient}</p>
@@ -324,51 +816,459 @@ export const sendTestEmail = async ({ toEmail }) => {
           <p style="font-size: 13px; color: #475569;">Inquiry proposals submitted through the Special Tech website will now trigger automated customer confirmations and administrator notifications.</p>
           <br/>
           <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; color: #94a3b8; font-size: 11px;">
-            Special Tech Admin Service • Sent automatically from production test suite
+            Special Tech Admin Service • Sent automatically from SMTP test suite via ${providerName}
           </div>
         </div>
       `,
     });
 
-    const statusMsg = `Success: Test email sent to ${targetRecipient} (Message ID: ${info.messageId || 'OK'}) at ${new Date().toISOString()}`;
-    await prisma.adminSetting.upsert({
-      where: { key: 'smtp_last_delivery_status' },
-      update: { value: statusMsg },
-      create: { key: 'smtp_last_delivery_status', value: statusMsg },
+    const nowIso = new Date().toISOString();
+    const statusMsg = `Success: Test email accepted by ${providerName} for ${targetRecipient} (Message ID: ${info.messageId || 'OK'}) at ${nowIso}`;
+
+    await Promise.all([
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_test_email_status' },
+        update: { value: 'ACCEPTED' },
+        create: { key: 'smtp_test_email_status', value: 'ACCEPTED' },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_test_delivery_status' },
+        update: { value: 'ACCEPTED_IN_TRANSIT' },
+        create: { key: 'smtp_test_delivery_status', value: 'ACCEPTED_IN_TRANSIT' },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_test_email_at' },
+        update: { value: nowIso },
+        create: { key: 'smtp_test_email_at', value: nowIso },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_test_email_recipient' },
+        update: { value: targetRecipient },
+        create: { key: 'smtp_test_email_recipient', value: targetRecipient },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_test_email_message_id' },
+        update: { value: info.messageId || '' },
+        create: { key: 'smtp_test_email_message_id', value: info.messageId || '' },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_last_delivery_status' },
+        update: { value: statusMsg },
+        create: { key: 'smtp_last_delivery_status', value: statusMsg },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_last_error' },
+        update: { value: '' },
+        create: { key: 'smtp_last_error', value: '' },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_last_error_type' },
+        update: { value: '' },
+        create: { key: 'smtp_last_error_type', value: '' },
+      }),
+    ]);
+
+    // Record test email attempt in Notification table for Outbound Email Telemetry & Audit logs
+    await prisma.notification.create({
+      data: {
+        title: testSubject,
+        message: `Verification test email accepted by provider (${providerName}) for ${targetRecipient}.`,
+        type: 'test_email',
+        channel: 'EMAIL',
+        deliveryStatus: 'SENT',
+        deliveryDetails: {
+          recipientEmail: targetRecipient,
+          maskedRecipientEmail: maskEmail(targetRecipient),
+          senderEmail: config.from,
+          subject: testSubject,
+          provider: providerName,
+          providerMessageId: info.messageId,
+          deliveryStatus: 'ACCEPTED_IN_TRANSIT',
+          attemptAt: nowIso,
+          protocol: config.port === 465 ? 'SSL' : 'STARTTLS',
+          host: config.host,
+        },
+        link: '/admin?tab=settings',
+        isRead: true,
+      },
     });
 
     return {
       success: true,
+      status: 'accepted',
+      provider: config.provider,
+      providerName,
       messageId: info.messageId,
       recipient: targetRecipient,
-      message: `Test email successfully dispatched to ${targetRecipient}.`,
+      maskedRecipient: maskEmail(targetRecipient),
+      deliveryStatus: 'ACCEPTED_IN_TRANSIT',
+      message: `Test email successfully accepted by ${providerName} for delivery to ${targetRecipient}.`,
     };
   } catch (err) {
     const rawMsg = err.message || '';
+    const nowIso = new Date().toISOString();
     let status = 'error';
+    let errorType = 'GENERAL';
     let cleanError = rawMsg;
 
     if (err.responseCode === 550 || /550.*only send testing emails/i.test(rawMsg)) {
       status = 'resend_testing_restriction';
+      errorType = 'RESEND_TESTING_MODE';
       const match = rawMsg.match(/own email address \(([^)]+)\)/i);
-      const permitted = match ? match[1] : (config.resendTestRecipient || 'your registered Resend address');
+      const permitted = match ? match[1] : (config.resendTestRecipient || 'naniabdi2504@gmail.com');
       cleanError = `Resend Testing Mode (550): You can only send testing emails to your own email address (${permitted}). Verify your domain in Resend to send to arbitrary recipients.`;
-    } else if (err.responseCode === 535 || /535|invalid login|authentication credentials invalid/i.test(rawMsg)) {
+    } else if (err.responseCode === 535 || /535|invalid login|authentication credentials invalid|username and password not accepted/i.test(rawMsg)) {
       status = 'auth_failed';
-      cleanError = 'SMTP Authentication Failure (535): Invalid credentials. Check SMTP_USER and SMTP_PASS.';
+      errorType = 'AUTH_FAILED';
+      cleanError = config.provider === 'gmail'
+        ? 'Authentication failed. Check your Gmail address and Google App Password.'
+        : 'Authentication failed. Check your Resend API Key.';
+    } else if (/timeout|ETIMEDOUT|ECONNREFUSED|ENOTFOUND|EHOSTUNREACH/i.test(rawMsg)) {
+      status = 'unreachable';
+      errorType = 'UNREACHABLE';
+      cleanError = `SMTP Server Unreachable: Connection timed out attempting to reach ${config.host}:${config.port}.`;
     }
 
-    await prisma.adminSetting.upsert({
-      where: { key: 'smtp_last_error' },
-      update: { value: cleanError },
-      create: { key: 'smtp_last_error', value: cleanError },
+    await Promise.all([
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_test_email_status' },
+        update: { value: 'REJECTED' },
+        create: { key: 'smtp_test_email_status', value: 'REJECTED' },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_test_delivery_status' },
+        update: { value: 'FAILED' },
+        create: { key: 'smtp_test_delivery_status', value: 'FAILED' },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_last_error' },
+        update: { value: cleanError },
+        create: { key: 'smtp_last_error', value: cleanError },
+      }),
+      prisma.adminSetting.upsert({
+        where: { key: 'smtp_last_error_type' },
+        update: { value: errorType },
+        create: { key: 'smtp_last_error_type', value: errorType },
+      }),
+    ]);
+
+    // Record failed test attempt in Notification table as FAILED with full error telemetry
+    await prisma.notification.create({
+      data: {
+        title: testSubject,
+        message: `Verification test email to ${targetRecipient} failed: ${cleanError}`,
+        type: 'test_email',
+        channel: 'EMAIL',
+        deliveryStatus: 'FAILED',
+        deliveryDetails: {
+          recipientEmail: targetRecipient,
+          maskedRecipientEmail: maskEmail(targetRecipient),
+          senderEmail: config.from,
+          subject: 'Special Tech SMTP Configuration Test',
+          provider: providerName,
+          providerMessageId: null,
+          deliveryStatus: 'FAILED',
+          errorMessage: cleanError,
+          errorType,
+          attemptAt: nowIso,
+          rawError: rawMsg,
+        },
+        link: '/admin?tab=settings',
+        isRead: true,
+      },
     });
 
     return {
       success: false,
       status,
+      errorType,
+      provider: config.provider,
+      providerName,
       error: cleanError,
       message: cleanError,
+      rawError: rawMsg,
+    };
+  }
+};
+
+/**
+ * Safely retry a failed email notification without duplicating successful deliveries
+ * Defaults to the currently active and configured SMTP provider (e.g. Gmail SMTP if active)
+ * Preserves audit history of prior attempts and records actual provider used
+ */
+export const retryNotificationEmail = async (notificationIdOrInquiryId) => {
+  const targetId = notificationIdOrInquiryId;
+  let notif = await prisma.notification.findUnique({
+    where: { id: targetId },
+    include: { customer: true, project: true },
+  });
+
+  // Fallback: If not found by notification ID, check if targetId is an inquiry ID or inquiryNumber
+  if (!notif) {
+    const inq = await prisma.inquiry.findFirst({
+      where: {
+        OR: [
+          { id: targetId },
+          { inquiryNumber: targetId },
+        ],
+      },
+      include: { customer: true },
+    });
+    if (inq) {
+      notif = await prisma.notification.findFirst({
+        where: {
+          customerId: inq.customerId,
+          channel: 'EMAIL',
+          OR: [
+            { deliveryDetails: { path: ['inquiryId'], equals: inq.id } },
+            { metadata: { path: ['inquiryId'], equals: inq.id } },
+          ],
+        },
+        orderBy: { createdAt: 'desc' },
+        include: { customer: true, project: true },
+      });
+    }
+  }
+
+  if (!notif) {
+    return { success: false, statusCode: 404, message: 'Email notification record not found.' };
+  }
+
+  if (notif.channel !== 'EMAIL') {
+    return { success: false, statusCode: 400, message: 'Notification is not an email dispatch record.' };
+  }
+
+  // Idempotency check: prevent duplicate send if already SENT or DELIVERED
+  if (notif.deliveryStatus === 'SENT' || notif.deliveryStatus === 'DELIVERED') {
+    return {
+      success: false,
+      statusCode: 409,
+      alreadyDelivered: true,
+      message: `Email was already accepted or delivered to provider (${notif.deliveryDetails?.providerMessageId || 'Confirmed'}). Duplicate dispatch is prevented.`,
+      notification: notif,
+    };
+  }
+
+  const details = notif.deliveryDetails || {};
+  const recipientEmail = details.recipientEmail || notif.customer?.email;
+
+  if (!recipientEmail || !recipientEmail.includes('@')) {
+    return {
+      success: false,
+      statusCode: 400,
+      message: 'Cannot retry: recipient has no valid registered email address.',
+    };
+  }
+
+  // Resolve currently active and configured SMTP provider
+  const activeConfig = await getSMTPConfig();
+  const activeProviderName = activeConfig.providerName; // 'Gmail SMTP' or 'Resend SMTP'
+
+  if (!activeConfig.isConfigured) {
+    return {
+      success: false,
+      statusCode: 400,
+      message: `Active provider (${activeProviderName}) is not configured. Please check your credentials in Email Settings.`,
+      error: `Active provider (${activeProviderName}) is not configured.`,
+      provider: activeProviderName,
+    };
+  }
+
+  // Determine what email template to resend
+  let sendResult = null;
+  const inquiryId = details.inquiryId || notif.metadata?.inquiryId;
+  const projectId = notif.projectId || details.projectId;
+
+  if (inquiryId) {
+    const inquiry = await prisma.inquiry.findUnique({
+      where: { id: inquiryId },
+      include: { customer: true },
+    });
+    if (inquiry && inquiry.customer) {
+      // NOTE: Status of inquiry is preserved and NOT changed during retry!
+      sendResult = await sendInquiryStatusEmail({
+        customer: inquiry.customer,
+        inquiry,
+        previousStatus: details.previousStatus || 'NEW',
+        newStatus: details.newStatus || inquiry.status,
+        notes: notif.metadata?.notes || details.notes || inquiry.internalNotes || '',
+      });
+    }
+  } else if (projectId) {
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: { customer: true },
+    });
+    if (project && project.customer) {
+      sendResult = await sendProjectStatusEmail({
+        project,
+        customer: project.customer,
+        previousStatus: details.previousStatus || 'PENDING',
+        newStatus: details.newStatus || project.status,
+        message: details.message || '',
+      });
+    }
+  } else {
+    // Test email or generic notification retry
+    sendResult = await sendTestEmail({ toEmail: recipientEmail });
+  }
+
+  if (!sendResult) {
+    return {
+      success: false,
+      statusCode: 400,
+      message: 'Unable to resolve original notification payload for dispatch retry.',
+    };
+  }
+
+  const nowIso = new Date().toISOString();
+  const originalProvider = details.originalProvider || details.provider || 'Resend SMTP';
+  const usedProvider = sendResult.provider || activeProviderName;
+
+  // Preserve previous attempts in audit history
+  const existingAttempts = Array.isArray(details.attempts) ? [...details.attempts] : [];
+  if (existingAttempts.length === 0 && (details.attemptAt || details.errorMessage || details.provider)) {
+    existingAttempts.push({
+      attemptNumber: 1,
+      attemptAt: details.attemptAt || notif.createdAt.toISOString(),
+      provider: originalProvider,
+      deliveryStatus: details.deliveryStatus || notif.deliveryStatus || 'FAILED',
+      errorMessage: details.errorMessage || null,
+      errorType: details.errorType || null,
+      providerMessageId: details.providerMessageId || null,
+      recipientEmail,
+    });
+  }
+
+  const nextAttemptNumber = existingAttempts.length + 1;
+  const newAttemptRecord = {
+    attemptNumber: nextAttemptNumber,
+    attemptAt: nowIso,
+    provider: usedProvider,
+    deliveryStatus: sendResult.success ? 'SENT' : 'FAILED',
+    errorMessage: sendResult.success ? null : (sendResult.error || 'Dispatch failed'),
+    errorType: sendResult.errorType || (sendResult.success ? null : 'PROVIDER_ERROR'),
+    providerMessageId: sendResult.messageId || null,
+    providerResponse: sendResult.providerResponse || null,
+    recipientEmail,
+  };
+
+  const updatedAttempts = [...existingAttempts, newAttemptRecord];
+
+  const updatedDeliveryDetails = {
+    ...details,
+    originalProvider,
+    provider: usedProvider,
+    previousProvider: details.provider || originalProvider,
+    deliveryStatus: sendResult.success ? 'SENT' : 'FAILED',
+    providerMessageId: sendResult.messageId || details.providerMessageId || null,
+    providerResponse: sendResult.providerResponse || null,
+    errorMessage: sendResult.success ? null : sendResult.error,
+    errorType: sendResult.errorType || null,
+    recipientEmail,
+    maskedRecipientEmail: sendResult.maskedRecipient || maskEmail(recipientEmail),
+    providerAccountOwner: activeConfig.adminEmail || 'naniabdi2504@gmail.com',
+    attemptAt: nowIso,
+    retriedAt: nowIso,
+    isRetry: true,
+    retryCount: nextAttemptNumber - 1,
+    attempts: updatedAttempts,
+  };
+
+  const updated = await prisma.notification.update({
+    where: { id: notif.id },
+    data: {
+      deliveryStatus: sendResult.success ? 'SENT' : 'FAILED',
+      message: sendResult.success
+        ? `Email successfully redelivered via ${usedProvider} to ${recipientEmail}.`
+        : `Email retry via ${usedProvider} failed for ${recipientEmail}: ${sendResult.error}`,
+      deliveryDetails: updatedDeliveryDetails,
+    },
+  });
+
+  // Synchronize linked in-app notification if one exists
+  try {
+    const linkedInAppNotif = await prisma.notification.findFirst({
+      where: {
+        customerId: notif.customerId,
+        channel: 'IN_APP',
+        deliveryDetails: {
+          path: ['email', 'notificationId'],
+          equals: notif.id,
+        },
+      },
+    });
+    if (linkedInAppNotif) {
+      const inAppDetails = linkedInAppNotif.deliveryDetails || {};
+      await prisma.notification.update({
+        where: { id: linkedInAppNotif.id },
+        data: {
+          deliveryDetails: {
+            ...inAppDetails,
+            email: {
+              ...inAppDetails.email,
+              status: sendResult.success ? 'SENT' : 'FAILED',
+              provider: usedProvider,
+              error: sendResult.success ? null : sendResult.error,
+              messageId: sendResult.messageId || null,
+              retriedAt: nowIso,
+            },
+          },
+        },
+      });
+    }
+  } catch (syncErr) {
+    console.warn('[Email Warning] Could not sync linked in-app notification:', syncErr.message);
+  }
+
+  // Record audit activity log
+  try {
+    await prisma.activityLog.create({
+      data: {
+        action: 'EMAIL_NOTIFICATION_RETRIED',
+        entityType: inquiryId ? 'INQUIRY' : (projectId ? 'PROJECT' : 'NOTIFICATION'),
+        entityId: inquiryId || projectId || notif.id,
+        details: {
+          notificationId: notif.id,
+          originalProvider,
+          usedProvider,
+          success: sendResult.success,
+          recipient: recipientEmail,
+          messageId: sendResult.messageId || null,
+          error: sendResult.error || null,
+          attemptNumber: nextAttemptNumber,
+        },
+      },
+    });
+  } catch (logErr) {
+    console.warn('[Email Warning] Could not record activity log for retry:', logErr.message);
+  }
+
+  if (sendResult.success) {
+    return {
+      success: true,
+      statusCode: 200,
+      message: `Email successfully retried and accepted by ${usedProvider} for ${recipientEmail}!`,
+      delivery: {
+        ...sendResult,
+        provider: usedProvider,
+        originalProvider,
+        attempts: updatedAttempts,
+      },
+      notification: updated,
+    };
+  } else {
+    return {
+      success: false,
+      statusCode: 400,
+      message: sendResult.error || `Email retry failed via ${usedProvider}.`,
+      delivery: {
+        ...sendResult,
+        provider: usedProvider,
+        originalProvider,
+        attempts: updatedAttempts,
+      },
+      notification: updated,
     };
   }
 };
@@ -810,15 +1710,21 @@ export const sendInquiryStatusEmail = async ({
       </html>
     `;
 
+    const providerName = getProviderName(config);
+    const accountOwner = config.resendAccountOwner || config.adminEmail || 'naniabdi2504@gmail.com';
+
     if (!config.isConfigured) {
-      console.warn(`[Email Warning] SMTP not configured. Inquiry status email cannot be sent to ${customer.email}.`);
+      const notConfiguredMsg = `${providerName} is not configured in Admin Settings. Please configure credentials before sending.`;
+      console.warn(`[Email Warning] ${notConfiguredMsg} Inquiry status email cannot be sent to ${customer.email}.`);
       return {
         success: false,
         status: 'Failed',
-        provider: 'Resend SMTP',
-        error: 'SMTP host, user, or password is not configured in .env or Admin Settings.',
+        provider: providerName,
+        error: notConfiguredMsg,
+        errorType: 'NOT_CONFIGURED',
         recipient: customer.email.trim(),
         maskedRecipient: maskEmail(customer.email.trim()),
+        providerAccountOwner: accountOwner,
       };
     }
 
@@ -827,10 +1733,12 @@ export const sendInquiryStatusEmail = async ({
       return {
         success: false,
         status: 'Failed',
-        provider: 'Resend SMTP',
-        error: 'Could not initialize SMTP transporter with current configuration',
+        provider: providerName,
+        error: `Could not initialize SMTP transporter for ${providerName} with current configuration`,
+        errorType: 'TRANSPORTER_INITIALIZATION_FAILED',
         recipient: customer.email.trim(),
         maskedRecipient: maskEmail(customer.email.trim()),
+        providerAccountOwner: accountOwner,
       };
     }
 
@@ -847,33 +1755,43 @@ export const sendInquiryStatusEmail = async ({
       return {
         success: true,
         status: 'Sent',
-        provider: 'Resend SMTP',
+        provider: providerName,
         messageId: info.messageId,
+        providerResponse: info.response || '250 OK',
         recipient: recipientEmail,
         maskedRecipient: maskEmail(recipientEmail),
+        providerAccountOwner: accountOwner,
       };
     } catch (sendErr) {
       const errMsg = sendErr.message || '';
       let cleanError = errMsg;
+      let errorType = 'PROVIDER_ERROR';
 
-      if (sendErr.responseCode === 550 || /550|only send testing emails|testing email address/i.test(errMsg)) {
-        cleanError = `Resend Testing Mode (550): Account is currently in testing mode and can only deliver to the verified account email (${config.adminEmail || 'naniabdi2504@gmail.com'}). To send to external customer domains, verify your domain at https://resend.com/domains.`;
+      if (providerName === 'Resend SMTP' && (sendErr.responseCode === 550 || /550|only send testing emails|testing email address|resend\.dev/i.test(errMsg))) {
+        cleanError = `Resend Testing Mode (550): Account is currently in testing mode and can only deliver to the verified account owner (${accountOwner}). To deliver to external customer domains, verify your domain at https://resend.com/domains.`;
+        errorType = 'RESEND_TESTING_MODE';
         console.warn(`[Email Notice] Customer email for inquiry "${inquiry.inquiryNumber}" rejected: ${cleanError}`);
       } else if (sendErr.responseCode === 535 || /535|authentication credentials invalid/i.test(errMsg)) {
-        cleanError = 'SMTP Authentication Failure (535): Invalid Resend credentials. Please verify your SMTP_PASS / API Key.';
+        cleanError = providerName === 'Gmail SMTP'
+          ? 'Gmail SMTP Authentication failed (535): Invalid credentials. Check your Gmail address and Google App Password.'
+          : 'Resend SMTP Authentication Failure (535): Invalid Resend credentials. Please verify your SMTP_PASS / API Key.';
+        errorType = 'AUTH_FAILED';
       } else if (/timeout|ETIMEDOUT|ECONNREFUSED/i.test(errMsg)) {
         cleanError = `SMTP Server Unreachable: Connection timed out attempting to reach ${config.host}:${config.port}.`;
+        errorType = 'SERVER_UNREACHABLE';
       }
 
       console.warn(`[Email Warning] Inquiry status email failed for ${customer.email}:`, cleanError);
       return {
         success: false,
         status: 'Failed',
-        provider: 'Resend SMTP',
+        provider: providerName,
         error: cleanError,
         rawError: errMsg,
+        errorType,
         recipient: customer.email.trim(),
         maskedRecipient: maskEmail(customer.email.trim()),
+        providerAccountOwner: accountOwner,
       };
     }
   } catch (err) {
@@ -881,10 +1799,12 @@ export const sendInquiryStatusEmail = async ({
     return {
       success: false,
       status: 'Failed',
-      provider: 'Resend SMTP',
+      provider: 'SMTP',
       error: err.message,
+      errorType: 'SYSTEM_ERROR',
       recipient: customer?.email || null,
       maskedRecipient: maskEmail(customer?.email || ''),
+      providerAccountOwner: 'naniabdi2504@gmail.com',
     };
   }
 };
@@ -1027,11 +1947,13 @@ export const sendProjectStatusEmail = async ({
       </html>
     `;
 
+    const providerName = getProviderName(config);
+
     if (!customer?.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email.trim())) {
       return {
         success: false,
         status: 'Failed',
-        provider: 'Resend SMTP',
+        provider: providerName,
         error: 'Project owner has no registered or valid customer email address.',
         recipient: customer?.email || null,
         maskedRecipient: maskEmail(customer?.email || ''),
@@ -1043,7 +1965,7 @@ export const sendProjectStatusEmail = async ({
       return {
         success: false,
         status: 'Failed',
-        provider: 'Resend SMTP',
+        provider: providerName,
         error: 'SMTP host, user, or password is not configured in .env or Admin Settings.',
         recipient: customer.email.trim(),
         maskedRecipient: maskEmail(customer.email.trim()),
@@ -1056,7 +1978,7 @@ export const sendProjectStatusEmail = async ({
       return {
         success: false,
         status: 'Failed',
-        provider: 'Resend SMTP',
+        provider: providerName,
         error: 'Could not initialize SMTP transporter with current configuration',
         recipient: customer.email.trim(),
         maskedRecipient: maskEmail(customer.email.trim()),
@@ -1076,7 +1998,7 @@ export const sendProjectStatusEmail = async ({
       return {
         success: true,
         status: 'Sent',
-        provider: 'Resend SMTP',
+        provider: providerName,
         messageId: info.messageId,
         recipient: recipientEmail,
         maskedRecipient: maskEmail(recipientEmail),
@@ -1089,7 +2011,9 @@ export const sendProjectStatusEmail = async ({
         cleanError = `Resend Testing Mode (550): Account is currently in testing mode and can only deliver to the verified account email (${config.adminEmail || 'naniabdi2504@gmail.com'}). To send to external customer domains, verify your domain at https://resend.com/domains.`;
         console.warn(`[Email Notice] Customer email for project "${project.title}" rejected: ${cleanError}`);
       } else if (sendErr.responseCode === 535 || /535|authentication credentials invalid/i.test(errMsg)) {
-        cleanError = 'SMTP Authentication Failure (535): Invalid Resend credentials. Please verify your SMTP_PASS / API Key.';
+        cleanError = providerName === 'Gmail SMTP'
+          ? 'Authentication failed. Check your Gmail address and Google App Password.'
+          : 'SMTP Authentication Failure (535): Invalid Resend credentials. Please verify your SMTP_PASS / API Key.';
       } else if (/timeout|ETIMEDOUT|ECONNREFUSED/i.test(errMsg)) {
         cleanError = `SMTP Server Unreachable: Connection timed out attempting to reach ${config.host}:${config.port}.`;
       }
@@ -1098,7 +2022,7 @@ export const sendProjectStatusEmail = async ({
       return {
         success: false,
         status: 'Failed',
-        provider: 'Resend SMTP',
+        provider: providerName,
         error: cleanError,
         rawError: errMsg,
         recipient: customer.email.trim(),
@@ -1110,7 +2034,7 @@ export const sendProjectStatusEmail = async ({
     return {
       success: false,
       status: 'Failed',
-      provider: 'Resend SMTP',
+      provider: 'SMTP',
       error: err.message,
       recipient: customer?.email || null,
       maskedRecipient: maskEmail(customer?.email || ''),

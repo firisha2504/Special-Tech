@@ -15,6 +15,9 @@ import {
   getAdminConversations,
   getAdminConversationById,
   getEmailStatus,
+  getEmailLogs,
+  retryEmailNotification,
+  saveEmailSettingsEndpoint,
   testSMTPConnectionEndpoint,
   sendTestEmailEndpoint,
   exportDatabaseSnapshot,
@@ -93,6 +96,9 @@ router.get('/conversations/:id', requirePermission('manage_ai_settings'), getAdm
 
 // Email & SMTP Notification Management
 router.get('/email/status', requirePermission('manage_system_settings'), getEmailStatus);
+router.post('/email/settings', requirePermission('manage_system_settings'), saveEmailSettingsEndpoint);
+router.get('/email/logs', requirePermission('manage_system_settings'), getEmailLogs);
+router.post('/email/retry-notification/:id', requirePermission('manage_system_settings'), retryEmailNotification);
 router.post('/email/test-connection', requirePermission('manage_system_settings'), testSMTPConnectionEndpoint);
 router.post('/email/send-test', requirePermission('manage_system_settings'), sendTestEmailEndpoint);
 

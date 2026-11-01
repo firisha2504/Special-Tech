@@ -36,6 +36,12 @@ import {
   Sliders,
   FileText,
   ShieldCheck,
+  AlertTriangle,
+  Key,
+  Globe,
+  Check,
+  Info,
+  Lock,
 } from 'lucide-react';
 import Logo from '../components/common/Logo';
 import AdminLayout from '../layouts/AdminLayout';
@@ -43,6 +49,7 @@ import AdminProjectManager from '../features/admin/AdminProjectManager';
 import AdminProductManager from '../features/admin/AdminProductManager';
 import AdminPermissionManager from '../features/admin/AdminPermissionManager';
 import InquiryStatusModal from '../components/admin/InquiryStatusModal';
+import { SimpleEmailManager } from '../components/admin/SimpleEmailManager';
 
 const ADMIN_TABS = [
   { id: 'overview', name: 'Overview', icon: LayoutDashboard },
@@ -164,19 +171,48 @@ export const AdminDashboardPage = () => {
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [loadingConv, setLoadingConv] = useState(false);
 
-  // Email / SMTP settings state
-  const [smtpHost, setSmtpHost] = useState('smtp.resend.com');
+  // Email / SMTP multi-provider state
+  const [selectedEmailProvider, setSelectedEmailProvider] = useState('gmail');
+
+  // Gmail SMTP Form State
+  const [gmailHost] = useState('smtp.gmail.com');
+  const [gmailPort] = useState('465');
+  const [gmailSecure] = useState('SSL/TLS');
+  const [gmailUser, setGmailUser] = useState('');
+  const [gmailPass, setGmailPass] = useState('');
+  const [gmailFromName, setGmailFromName] = useState('Special Tech');
+  const [gmailFromEmail, setGmailFromEmail] = useState('');
+
+  // Resend SMTP Form State
+  const [resendHost, setResendHost] = useState('smtp.resend.com');
+  const [resendPort, setResendPort] = useState('465');
+  const [resendUser, setResendUser] = useState('resend');
+  const [resendPass, setResendPass] = useState('');
+  const [resendFrom, setResendFrom] = useState('Special Tech <onboarding@resend.dev>');
+
+  // Legacy mirrors for backwards-compatibility
+  const [smtpHost, setSmtpHost] = useState('smtp.gmail.com');
   const [smtpPort, setSmtpPort] = useState('465');
-  const [smtpUser, setSmtpUser] = useState('resend');
+  const [smtpUser, setSmtpUser] = useState('');
   const [smtpPass, setSmtpPass] = useState('');
-  const [smtpFrom, setSmtpFrom] = useState('Special Tech <info@specialtech.com>');
+  const [smtpFrom, setSmtpFrom] = useState('Special Tech');
+
+  // General & diagnostics state
   const [adminEmailNotify, setAdminEmailNotify] = useState('contact@specialtech.com');
   const [smtpStatusData, setSmtpStatusData] = useState(null);
+  const [savingEmailSettings, setSavingEmailSettings] = useState(false);
   const [testingSmtp, setTestingSmtp] = useState(false);
   const [smtpTestResult, setSmtpTestResult] = useState(null);
   const [testEmailRecipient, setTestEmailRecipient] = useState('');
   const [sendingTestEmail, setSendingTestEmail] = useState(false);
   const [sendTestEmailResult, setSendTestEmailResult] = useState(null);
+  const [emailLogs, setEmailLogs] = useState([]);
+  const [loadingEmailLogs, setLoadingEmailLogs] = useState(false);
+  const [retryingEmailId, setRetryingEmailId] = useState(null);
+
+  // Credential replacement confirmation modal state
+  const [showReplaceCredsModal, setShowReplaceCredsModal] = useState(false);
+  const [pendingSavePayload, setPendingSavePayload] = useState(null);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -220,10 +256,36 @@ export const AdminDashboardPage = () => {
         }
         adminApi.getEmailStatus().then((eRes) => {
           if (eRes.data?.success) {
-            setSmtpStatusData(eRes.data.data);
-            if (eRes.data.data.adminEmail) {
-              setTestEmailRecipient((prev) => prev || eRes.data.data.adminEmail);
+            const data = eRes.data.data;
+            setSmtpStatusData(data);
+            if (data.provider) setSelectedEmailProvider(data.provider);
+            if (data.port) setSmtpPort(String(data.port));
+            if (data.host && data.host !== '(Not configured)') setSmtpHost(data.host);
+            if (data.from) setSmtpFrom(data.from);
+            if (data.adminEmail) {
+              setAdminEmailNotify(data.adminEmail);
             }
+            if (data.resendConfig) {
+              if (data.resendConfig.host) setResendHost(data.resendConfig.host);
+              if (data.resendConfig.port) setResendPort(String(data.resendConfig.port));
+              if (data.resendConfig.user) setResendUser(data.resendConfig.user);
+              if (data.resendConfig.from) setResendFrom(data.resendConfig.from);
+            }
+            if (data.gmailConfig) {
+              if (data.gmailConfig.user) setGmailUser(data.gmailConfig.user);
+              if (data.gmailConfig.fromName) setGmailFromName(data.gmailConfig.fromName);
+              if (data.gmailConfig.fromEmail) setGmailFromEmail(data.gmailConfig.fromEmail);
+            }
+            setTestEmailRecipient((prev) => {
+              if (prev) return prev;
+              if (data.provider === 'gmail' && data.gmailConfig?.user) return data.gmailConfig.user;
+              return data.resendPermittedRecipient || data.adminEmail || '';
+            });
+          }
+        }).catch(() => {});
+        adminApi.getEmailLogs().then((lRes) => {
+          if (lRes.data?.success) {
+            setEmailLogs(lRes.data.data);
           }
         }).catch(() => {});
         if (activeTab === 'ai') {
@@ -362,48 +424,202 @@ export const AdminDashboardPage = () => {
     }
   };
 
-  const handleSaveSMTPSettings = async () => {
+  const executeSaveEmailSettings = async (payload) => {
+    setSavingEmailSettings(true);
     try {
-      await adminApi.updateSetting({ key: 'smtp_host', value: smtpHost });
-      await adminApi.updateSetting({ key: 'smtp_port', value: smtpPort });
-      await adminApi.updateSetting({ key: 'smtp_user', value: smtpUser });
-      await adminApi.updateSetting({ key: 'smtp_from', value: smtpFrom });
-      await adminApi.updateSetting({ key: 'admin_email', value: adminEmailNotify });
-      if (smtpPass.trim()) {
-        await adminApi.updateSetting({ key: 'smtp_pass', value: smtpPass.trim() });
-        setSmtpPass('');
+      const res = await adminApi.saveEmailSettings(payload);
+      if (payload.provider === 'gmail') {
+        setGmailPass('');
+      } else {
+        setResendPass('');
       }
       setToast({
         type: 'success',
-        title: 'SMTP Saved',
-        message: 'SMTP Email Configuration saved successfully!',
+        title: 'SMTP Configuration Saved',
+        message: res.data?.message || `${payload.provider === 'gmail' ? 'Gmail SMTP' : 'Resend SMTP'} settings saved securely.`,
       });
-      const stat = await adminApi.getEmailStatus().catch(() => ({}));
+
+      const [stat, logs] = await Promise.all([
+        adminApi.getEmailStatus().catch(() => ({})),
+        adminApi.getEmailLogs().catch(() => ({})),
+      ]);
       if (stat.data?.success) setSmtpStatusData(stat.data.data);
-      loadDashboardData();
+      if (logs.data?.success) setEmailLogs(logs.data.data);
     } catch (err) {
       setToast({
         type: 'error',
         title: 'Save Failed',
         message: 'Failed to save SMTP settings: ' + (err.response?.data?.message || err.message),
       });
+    } finally {
+      setSavingEmailSettings(false);
+      setShowReplaceCredsModal(false);
+      setPendingSavePayload(null);
     }
   };
+
+  const handleSaveEmailSettings = async () => {
+    if (selectedEmailProvider === 'gmail') {
+      if (!gmailUser || !gmailUser.includes('@')) {
+        setToast({
+          type: 'error',
+          title: 'Validation Error',
+          message: 'A valid Gmail address is required for SMTP Username.',
+        });
+        return;
+      }
+      const hasExistingPass = !!smtpStatusData?.gmailConfig?.hasPass;
+      if (!hasExistingPass && !gmailPass.trim()) {
+        setToast({
+          type: 'error',
+          title: 'Validation Error',
+          message: 'Google App Password is required. Please generate a 16-character App Password at myaccount.google.com/apppasswords.',
+        });
+        return;
+      }
+      const payload = {
+        provider: 'gmail',
+        gmailUser: gmailUser.trim(),
+        gmailPass: gmailPass.trim(),
+        gmailFromName: gmailFromName.trim() || 'Special Tech',
+        gmailFromEmail: (gmailFromEmail || gmailUser).trim(),
+        adminEmail: adminEmailNotify.trim(),
+      };
+
+      if (hasExistingPass && gmailPass.trim()) {
+        setPendingSavePayload(payload);
+        setShowReplaceCredsModal(true);
+        return;
+      }
+      await executeSaveEmailSettings(payload);
+    } else {
+      // Resend SMTP
+      if (!resendUser.trim()) {
+        setToast({
+          type: 'error',
+          title: 'Validation Error',
+          message: 'SMTP Username is required (usually "resend").',
+        });
+        return;
+      }
+      const hasExistingPass = !!smtpStatusData?.resendConfig?.hasPass;
+      if (!hasExistingPass && !resendPass.trim()) {
+        setToast({
+          type: 'error',
+          title: 'Validation Error',
+          message: 'Resend API Key is required.',
+        });
+        return;
+      }
+      const payload = {
+        provider: 'resend',
+        resendHost: resendHost.trim(),
+        resendPort: resendPort,
+        resendUser: resendUser.trim(),
+        resendPass: resendPass.trim(),
+        resendFrom: resendFrom.trim(),
+        adminEmail: adminEmailNotify.trim(),
+      };
+
+      if (hasExistingPass && resendPass.trim()) {
+        setPendingSavePayload(payload);
+        setShowReplaceCredsModal(true);
+        return;
+      }
+      await executeSaveEmailSettings(payload);
+    }
+  };
+
+  const handleSaveSMTPSettings = handleSaveEmailSettings;
 
   const handleTestSMTPConnection = async () => {
     setTestingSmtp(true);
     setSmtpTestResult(null);
     try {
-      const res = await adminApi.testSMTPConnection();
+      let testPayload = {};
+      if (selectedEmailProvider === 'gmail') {
+        if (!gmailUser || !gmailUser.includes('@')) {
+          setToast({
+            type: 'error',
+            title: 'Validation Error',
+            message: 'Please enter a valid Gmail address in SMTP Username before testing.',
+          });
+          setTestingSmtp(false);
+          return;
+        }
+        if (!gmailPass && !smtpStatusData?.gmailConfig?.hasPass) {
+          setToast({
+            type: 'error',
+            title: 'Validation Error',
+            message: 'Please enter your Google App Password before testing.',
+          });
+          setTestingSmtp(false);
+          return;
+        }
+        testPayload = {
+          provider: 'gmail',
+          host: 'smtp.gmail.com',
+          port: 465,
+          secure: true,
+          user: gmailUser.trim(),
+          pass: gmailPass.trim() || undefined,
+          from: `${gmailFromName || 'Special Tech'} <${gmailFromEmail || gmailUser}>`,
+        };
+      } else {
+        if (!resendUser.trim()) {
+          setToast({
+            type: 'error',
+            title: 'Validation Error',
+            message: 'Please enter SMTP Username before testing.',
+          });
+          setTestingSmtp(false);
+          return;
+        }
+        if (!resendPass && !smtpStatusData?.resendConfig?.hasPass) {
+          setToast({
+            type: 'error',
+            title: 'Validation Error',
+            message: 'Please enter your Resend API Key before testing.',
+          });
+          setTestingSmtp(false);
+          return;
+        }
+        testPayload = {
+          provider: 'resend',
+          host: resendHost.trim(),
+          port: Number(resendPort) || 465,
+          secure: Number(resendPort) === 465,
+          user: resendUser.trim(),
+          pass: resendPass.trim() || undefined,
+          from: resendFrom.trim(),
+        };
+      }
+
+      const res = await adminApi.testSMTPConnection(testPayload);
       setSmtpTestResult(res.data);
+      setToast({
+        type: 'success',
+        title: 'SMTP Authentication Verified',
+        message: res.data?.message || 'SMTP authentication handshake verified successfully!',
+      });
       const stat = await adminApi.getEmailStatus().catch(() => ({}));
       if (stat.data?.success) setSmtpStatusData(stat.data.data);
     } catch (err) {
+      const errData = err.response?.data || {};
+      const errMsg = errData.message || err.message || 'SMTP connection test failed';
       setSmtpTestResult({
         success: false,
-        status: 'error',
-        message: err.response?.data?.message || err.message || 'SMTP connection test failed',
+        status: errData.status || 'error',
+        message: errMsg,
+        error: errMsg,
       });
+      setToast({
+        type: 'error',
+        title: 'Connection Test Failed',
+        message: errMsg,
+      });
+      const stat = await adminApi.getEmailStatus().catch(() => ({}));
+      if (stat.data?.success) setSmtpStatusData(stat.data.data);
     } finally {
       setTestingSmtp(false);
     }
@@ -415,15 +631,59 @@ export const AdminDashboardPage = () => {
     try {
       const res = await adminApi.sendTestEmail({ toEmail: testEmailRecipient });
       setSendTestEmailResult(res.data);
-      const stat = await adminApi.getEmailStatus().catch(() => ({}));
+      const [stat, logs] = await Promise.all([
+        adminApi.getEmailStatus().catch(() => ({})),
+        adminApi.getEmailLogs().catch(() => ({})),
+      ]);
       if (stat.data?.success) setSmtpStatusData(stat.data.data);
+      if (logs.data?.success) setEmailLogs(logs.data.data);
     } catch (err) {
       setSendTestEmailResult({
         success: false,
         error: err.response?.data?.message || err.message || 'Failed to dispatch test email',
       });
+      const logs = await adminApi.getEmailLogs().catch(() => ({}));
+      if (logs.data?.success) setEmailLogs(logs.data.data);
     } finally {
       setSendingTestEmail(false);
+    }
+  };
+
+  const handleRetryEmailNotification = async (notificationId) => {
+    if (retryingEmailId) return;
+    setRetryingEmailId(notificationId);
+    try {
+      const res = await adminApi.retryEmailNotification(notificationId);
+      if (res.data?.success) {
+        setToast({
+          type: 'success',
+          title: 'Email Delivered',
+          message: res.data.message || 'Email successfully retried and accepted by provider!',
+        });
+      } else {
+        setToast({
+          type: res.data?.alreadyDelivered ? 'warning' : 'error',
+          title: res.data?.alreadyDelivered ? 'Duplicate Prevented' : 'Retry Failed',
+          message: res.data?.message || 'Email retry failed',
+        });
+      }
+      const [logs, stat] = await Promise.all([
+        adminApi.getEmailLogs().catch(() => ({})),
+        adminApi.getEmailStatus().catch(() => ({})),
+      ]);
+      if (logs.data?.success) setEmailLogs(logs.data.data);
+      if (stat.data?.success) setSmtpStatusData(stat.data.data);
+    } catch (err) {
+      const isDuplicate = err.response?.status === 409 || err.response?.data?.alreadyDelivered;
+      setToast({
+        type: isDuplicate ? 'warning' : 'error',
+        title: isDuplicate ? 'Duplicate Prevented' : 'Retry Failed',
+        message: err.response?.data?.message || err.message || 'Failed to retry email delivery',
+      });
+      const logs = await adminApi.getEmailLogs().catch(() => ({}));
+      if (logs.data?.success) setEmailLogs(logs.data.data);
+    } finally {
+      setRetryingEmailId(null);
     }
   };
 
@@ -1062,324 +1322,8 @@ export const AdminDashboardPage = () => {
           tabIndex={0}
           className="max-w-4xl space-y-8 focus-visible:outline-none"
         >
-          {/* 1. OUTBOUND EMAIL & SMTP NOTIFICATIONS */}
-          <div className="rounded-3xl glass-panel border border-slate-200 dark:border-slate-800 p-8 space-y-6 hover:shadow-soft">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100 dark:border-slate-800">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 rounded-xl bg-blue-500/10 text-brand-blue dark:text-brand-cyan">
-                    <Mail className="w-5 h-5" />
-                  </div>
-                  <h2 className="text-xl font-bold text-slate-900 dark:text-white">Email & Resend SMTP Service</h2>
-                </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Configure transactional email transport for customer proposal receipts and administrator notifications.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span
-                  className={`px-3 py-1.5 rounded-full text-xs font-mono font-bold flex items-center gap-1.5 ${
-                    smtpStatusData?.lastStatus === 'connected'
-                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                      : smtpStatusData?.lastStatus === 'error'
-                      ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
-                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
-                  }`}
-                >
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      smtpStatusData?.lastStatus === 'connected'
-                        ? 'bg-emerald-500 animate-pulse'
-                        : smtpStatusData?.lastStatus === 'error'
-                        ? 'bg-rose-500'
-                        : 'bg-amber-500'
-                    }`}
-                  />
-                  <span>
-                    {smtpStatusData?.lastStatus === 'connected'
-                      ? 'SMTP CONNECTED'
-                      : smtpStatusData?.lastStatus === 'error'
-                      ? 'SMTP ERROR'
-                      : smtpStatusData?.isConfigured
-                      ? 'SMTP CONFIGURED (UNTESTED)'
-                      : 'SMTP NOT CONFIGURED'}
-                  </span>
-                </span>
-              </div>
-            </div>
-
-            {/* Operational Health Overview Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 space-y-1">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500 block">Host & Port</span>
-                <span className="font-bold text-slate-900 dark:text-white font-mono">
-                  {smtpStatusData?.host || 'smtp.resend.com'}:{smtpStatusData?.port || 465}
-                </span>
-                <span className="text-[10px] text-slate-400 block">{smtpStatusData?.secure ? 'SSL (Secure)' : 'STARTTLS'}</span>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 space-y-1">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500 block">Active Sender (From)</span>
-                <span className="font-semibold text-slate-900 dark:text-white truncate block">
-                  {smtpStatusData?.from || 'Special Tech <info@specialtech.com>'}
-                </span>
-                <span className="text-[10px] text-slate-400 block">User: {smtpStatusData?.user || 'resend'}</span>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 space-y-1">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500 block">Admin Notification Recipient</span>
-                <span className="font-semibold text-brand-blue dark:text-brand-cyan truncate block">
-                  {smtpStatusData?.adminEmail || 'contact@specialtech.com'}
-                </span>
-                <span className="text-[10px] text-slate-400 block">Credentials: {smtpStatusData?.hasPass ? '•••••••• (Configured)' : 'None'}</span>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 space-y-1">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500 block">Last Verified Connection</span>
-                <span className="font-mono text-slate-900 dark:text-white block">
-                  {smtpStatusData?.lastConnectedAt ? new Date(smtpStatusData.lastConnectedAt).toLocaleTimeString() : 'Never'}
-                </span>
-                <span className="text-[10px] text-slate-400 block">
-                  {smtpStatusData?.lastConnectedAt ? new Date(smtpStatusData.lastConnectedAt).toLocaleDateString() : 'Pending verification'}
-                </span>
-              </div>
-            </div>
-
-            {/* Last Error Notice if any */}
-            {smtpStatusData?.lastError && (
-              <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-600 dark:text-rose-400 flex items-start gap-3">
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                <div>
-                  <strong className="font-bold">Last SMTP Handshake Error:</strong> {smtpStatusData.lastError}
-                </div>
-              </div>
-            )}
-
-            {/* Last Delivery Status notice */}
-            {smtpStatusData?.lastDeliveryStatus && (
-              <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-xs text-slate-700 dark:text-slate-300 flex items-start gap-3">
-                <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-brand-blue dark:text-brand-cyan" />
-                <div>
-                  <strong className="font-bold text-brand-blue dark:text-brand-cyan">Last Delivery Activity:</strong>{' '}
-                  {smtpStatusData.lastDeliveryStatus}
-                </div>
-              </div>
-            )}
-
-            {/* SMTP Configuration Form */}
-            <div className="space-y-4 pt-2">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider font-mono">
-                  Transport Configuration (Resend SMTP / Custom)
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSmtpHost('smtp.resend.com');
-                    setSmtpPort('465');
-                    setSmtpUser('resend');
-                    setSmtpFrom('Special Tech <info@specialtech.com>');
-                  }}
-                  className="text-[11px] text-brand-blue dark:text-brand-cyan hover:underline font-semibold"
-                >
-                  Apply Resend SMTP Defaults
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="sm:col-span-2">
-                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1 text-xs">SMTP Host</label>
-                  <input
-                    type="text"
-                    value={smtpHost}
-                    onChange={(e) => setSmtpHost(e.target.value)}
-                    placeholder="smtp.resend.com"
-                    className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs focus:outline-none focus:border-brand-blue dark:focus:border-cyan-400 font-mono shadow-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1 text-xs">Port</label>
-                  <input
-                    type="text"
-                    value={smtpPort}
-                    onChange={(e) => setSmtpPort(e.target.value)}
-                    placeholder="465 (SSL) or 587 (TLS)"
-                    className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs focus:outline-none focus:border-brand-blue dark:focus:border-cyan-400 font-mono shadow-sm"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1 text-xs">SMTP Username</label>
-                  <input
-                    type="text"
-                    value={smtpUser}
-                    onChange={(e) => setSmtpUser(e.target.value)}
-                    placeholder="resend"
-                    className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs focus:outline-none focus:border-brand-blue dark:focus:border-cyan-400 font-mono shadow-sm"
-                  />
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-slate-700 dark:text-slate-300 font-semibold text-xs">
-                      SMTP Password / API Key
-                    </label>
-                    {smtpStatusData?.hasPass && (
-                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                        ✓ Configured (Saved)
-                      </span>
-                    )}
-                  </div>
-                  <input
-                    type="password"
-                    value={smtpPass}
-                    onChange={(e) => setSmtpPass(e.target.value)}
-                    placeholder={smtpStatusData?.hasPass ? '•••••••••••••••• (Leave blank to keep existing)' : 'Enter Resend API Key (re_...)'}
-                    className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs focus:outline-none focus:border-brand-blue dark:focus:border-cyan-400 font-mono shadow-sm"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1 text-xs">
-                    Sender Address (From)
-                  </label>
-                  <input
-                    type="text"
-                    value={smtpFrom}
-                    onChange={(e) => setSmtpFrom(e.target.value)}
-                    placeholder="Special Tech <info@specialtech.com>"
-                    className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs focus:outline-none focus:border-brand-blue dark:focus:border-cyan-400 shadow-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1 text-xs">
-                    Administrator Alert Recipient
-                  </label>
-                  <input
-                    type="email"
-                    value={adminEmailNotify}
-                    onChange={(e) => setAdminEmailNotify(e.target.value)}
-                    placeholder="contact@specialtech.com"
-                    className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs focus:outline-none focus:border-brand-blue dark:focus:border-cyan-400 shadow-sm"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-2 flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={handleSaveSMTPSettings}
-                  className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-bold text-xs shadow-glow-blue flex items-center gap-2 hover:opacity-95 transition-opacity"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>Save SMTP Configuration</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Test Connection and Send Test Email Actions */}
-            <div className="pt-6 border-t border-slate-100 dark:border-slate-800 space-y-4">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider font-mono">
-                Verification & Test Dispatch
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* 1. Live Handshake Test */}
-                <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-3">
-                  <div className="space-y-1">
-                    <h4 className="font-bold text-slate-900 dark:text-white text-xs flex items-center gap-2">
-                      <Server className="w-4 h-4 text-brand-blue dark:text-brand-cyan" />
-                      <span>SMTP Handshake Verification</span>
-                    </h4>
-                    <p className="text-[11px] text-slate-500">
-                      Tests socket authentication with {smtpHost || 'smtp.resend.com'} without dispatching an email.
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleTestSMTPConnection}
-                    disabled={testingSmtp}
-                    className="w-full py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs hover:border-brand-blue dark:hover:border-cyan-400 transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${testingSmtp ? 'animate-spin' : ''}`} />
-                    <span>{testingSmtp ? 'Verifying Socket...' : 'Test SMTP Connection Live'}</span>
-                  </button>
-
-                  {smtpTestResult && (
-                    <div
-                      className={`p-3 rounded-xl text-xs font-mono border ${
-                        smtpTestResult.success
-                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                          : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
-                      }`}
-                    >
-                      <div className="font-bold">{smtpTestResult.success ? '✓ Handshake Succeeded' : '✕ Handshake Failed'}</div>
-                      <div className="text-[11px] mt-1 break-all">
-                        {smtpTestResult.message || smtpTestResult.error}
-                        {smtpTestResult.latencyMs && ` (${smtpTestResult.latencyMs}ms)`}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* 2. Dispatch Live Test Email */}
-                <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-3">
-                  <div className="space-y-1">
-                    <h4 className="font-bold text-slate-900 dark:text-white text-xs flex items-center gap-2">
-                      <Send className="w-4 h-4 text-brand-blue dark:text-brand-cyan" />
-                      <span>Send Real Verification Email</span>
-                    </h4>
-                    <p className="text-[11px] text-slate-500">
-                      Dispatches a formatted Special Tech test email to confirm mailbox receipt.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <input
-                      type="email"
-                      value={testEmailRecipient}
-                      onChange={(e) => setTestEmailRecipient(e.target.value)}
-                      placeholder="Recipient email address"
-                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs focus:outline-none focus:border-brand-blue shadow-sm"
-                    />
-
-                    <button
-                      type="button"
-                      onClick={handleSendTestEmail}
-                      disabled={sendingTestEmail || !testEmailRecipient}
-                      className="w-full py-2.5 rounded-xl bg-brand-blue hover:bg-blue-600 text-white font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
-                    >
-                      <Send className={`w-3.5 h-3.5 ${sendingTestEmail ? 'animate-pulse' : ''}`} />
-                      <span>{sendingTestEmail ? 'Sending...' : 'Dispatch Test Email'}</span>
-                    </button>
-                  </div>
-
-                  {sendTestEmailResult && (
-                    <div
-                      className={`p-3 rounded-xl text-xs font-mono border ${
-                        sendTestEmailResult.success
-                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                          : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
-                      }`}
-                    >
-                      <div className="font-bold">{sendTestEmailResult.success ? '✓ Email Dispatched' : '✕ Delivery Failed'}</div>
-                      <div className="text-[11px] mt-1 break-all">
-                        {sendTestEmailResult.message || sendTestEmailResult.error}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
+          {/* SIMPLIFIED EMAIL CONFIGURATION & ADMINISTRATION */}
+          <SimpleEmailManager user={user} onToast={setToast} />
 
           {/* 2. COMPANY & SYSTEM IDENTITY SETTINGS */}
           <div className="rounded-3xl glass-panel border border-slate-200 dark:border-slate-800 p-8 space-y-6 hover:shadow-soft">
@@ -1537,6 +1481,101 @@ export const AdminDashboardPage = () => {
                       <div className="whitespace-pre-line">{m.content}</div>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* Email Notification & Dispatch Telemetry Card */}
+            {selectedInquiry.latestEmailNotification && (
+              <div className="space-y-3 pt-4 border-t border-slate-200 dark:border-slate-800 text-xs">
+                <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-brand-blue dark:text-brand-cyan" />
+                      <span className="font-bold text-slate-900 dark:text-white">Customer Email Notification</span>
+                    </div>
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold border inline-flex items-center gap-1.5 ${
+                        selectedInquiry.latestEmailNotification.deliveryStatus === 'SENT' || selectedInquiry.latestEmailNotification.deliveryStatus === 'DELIVERED'
+                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                          : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
+                      }`}
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          selectedInquiry.latestEmailNotification.deliveryStatus === 'SENT' || selectedInquiry.latestEmailNotification.deliveryStatus === 'DELIVERED'
+                            ? 'bg-emerald-500'
+                            : 'bg-rose-500'
+                        }`}
+                      />
+                      <span>
+                        {selectedInquiry.latestEmailNotification.deliveryStatus === 'SENT' || selectedInquiry.latestEmailNotification.deliveryStatus === 'DELIVERED'
+                          ? '✓ Accepted by Provider'
+                          : '✗ Delivery Failed'}
+                      </span>
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px] p-3 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/80">
+                    <div>
+                      <span className="text-slate-400 text-[10px] uppercase font-mono block">Actual Customer Recipient</span>
+                      <span className="font-mono font-bold text-slate-900 dark:text-white block">
+                        {selectedInquiry.customer?.email}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 text-[10px] uppercase font-mono block">Original Failed Provider</span>
+                      <span className="font-mono font-semibold text-slate-700 dark:text-slate-300 block">
+                        {selectedInquiry.latestEmailNotification.deliveryDetails?.originalProvider || selectedInquiry.latestEmailNotification.deliveryDetails?.provider || 'Resend SMTP'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 text-[10px] uppercase font-mono block">Provider for Next Retry</span>
+                      <span className="font-mono font-bold text-brand-blue dark:text-brand-cyan block">
+                        {emailSettings?.providerName || 'Gmail SMTP'} (Active)
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 text-[10px] uppercase font-mono block">Telemetry Reference</span>
+                      <span className="font-mono text-[10px] text-slate-500 truncate block">
+                        {selectedInquiry.latestEmailNotification.deliveryDetails?.providerMessageId
+                          ? `ID: ${selectedInquiry.latestEmailNotification.deliveryDetails.providerMessageId}`
+                          : selectedInquiry.latestEmailNotification.deliveryDetails?.errorMessage
+                          ? selectedInquiry.latestEmailNotification.deliveryDetails.errorMessage.slice(0, 50) + '...'
+                          : 'No telemetry logged'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {selectedInquiry.latestEmailNotification.deliveryStatus === 'FAILED' && (
+                    <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-[11px] text-rose-600 dark:text-rose-400 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5 font-bold">
+                          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                          <span>Delivery failed: {selectedInquiry.latestEmailNotification.deliveryDetails?.errorMessage?.slice(0, 120)}...</span>
+                        </div>
+                        <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                          Recipient: {selectedInquiry.customer?.email} • Retry will dispatch via {emailSettings?.providerName || 'Gmail SMTP'}.
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await handleRetryEmailNotification(selectedInquiry.latestEmailNotification.id);
+                          const updatedInq = await inquiryApi.getById(selectedInquiry.id).catch(() => ({}));
+                          if (updatedInq.data?.success && updatedInq.data?.data) {
+                            setSelectedInquiry(updatedInq.data.data);
+                          }
+                        }}
+                        disabled={retryingEmailId === selectedInquiry.latestEmailNotification.id}
+                        className="px-3.5 py-1.5 rounded-xl bg-brand-blue hover:bg-blue-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-sm disabled:opacity-50 cursor-pointer flex-shrink-0"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${retryingEmailId === selectedInquiry.latestEmailNotification.id ? 'animate-spin' : ''}`} />
+                        <span>{retryingEmailId === selectedInquiry.latestEmailNotification.id ? 'Retrying...' : 'Retry Email Delivery'}</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

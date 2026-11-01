@@ -105,7 +105,10 @@ export const adminApi = {
   getConversations: () => api.get('/admin/conversations'),
   getConversationById: (id) => api.get(`/admin/conversations/${id}`),
   getEmailStatus: () => api.get('/admin/email/status'),
-  testSMTPConnection: () => api.post('/admin/email/test-connection'),
+  saveEmailSettings: (data) => api.post('/admin/email/settings', data),
+  getEmailLogs: (params) => api.get('/admin/email/logs', { params }),
+  retryEmailNotification: (id) => api.post(`/admin/email/retry-notification/${id}`),
+  testSMTPConnection: (data) => api.post('/admin/email/test-connection', data),
   sendTestEmail: (data) => api.post('/admin/email/send-test', data),
   exportBackup: () => api.get('/admin/backups/export'),
 };

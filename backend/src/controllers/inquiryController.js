@@ -1,7 +1,12 @@
 import prisma from '../config/db.js';
 import { customerInquirySchema } from '../validators/schemas.js';
 import { generateSpecificationPDF } from '../services/pdf/pdfService.js';
-import { sendInquiryNotifications, sendInquiryStatusEmail, maskEmail } from '../services/email/emailService.js';
+import {
+  sendInquiryNotifications,
+  sendInquiryStatusEmail,
+  retryNotificationEmail,
+  maskEmail,
+} from '../services/email/emailService.js';
 import { notifyNewInquiry, notifyInquiryStatusChange } from '../services/notification/notificationService.js';
 
 export const submitInquiry = async (req, res, next) => {
@@ -160,7 +165,27 @@ export const getInquiryById = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Inquiry not found' });
     }
 
-    res.json({ success: true, data: inquiry });
+    // Attach latest email notification for this inquiry to provide real-time delivery telemetry
+    const latestEmailNotification = await prisma.notification.findFirst({
+      where: {
+        customerId: inquiry.customerId,
+        channel: 'EMAIL',
+        OR: [
+          { deliveryDetails: { path: ['inquiryId'], equals: inquiry.id } },
+          { metadata: { path: ['inquiryId'], equals: inquiry.id } },
+          { message: { contains: inquiry.inquiryNumber } },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json({
+      success: true,
+      data: {
+        ...inquiry,
+        latestEmailNotification: latestEmailNotification || null,
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -298,10 +323,10 @@ export const retryInquiryEmailNotification = async (req, res, next) => {
           customerId: inquiry.customer.id,
           channel: 'EMAIL',
           deliveryStatus: 'SENT',
-          deliveryDetails: {
-            path: ['inquiryId'],
-            equals: inquiry.id,
-          },
+          OR: [
+            { deliveryDetails: { path: ['inquiryId'], equals: inquiry.id } },
+            { metadata: { path: ['inquiryId'], equals: inquiry.id } },
+          ],
         },
         orderBy: { createdAt: 'desc' },
       });
@@ -313,84 +338,44 @@ export const retryInquiryEmailNotification = async (req, res, next) => {
         return res.status(409).json({
           success: false,
           alreadyDelivered: true,
-          message: `Email notification for status "${inquiry.status}" was already accepted by email provider (Message ID: ${existingSuccess.deliveryDetails?.providerMessageId || 'Confirmed'}). Duplicate delivery prevented.`,
+          message: `Email notification for status "${inquiry.status}" was already accepted by email provider (${existingSuccess.deliveryDetails?.providerMessageId || 'Confirmed'}). Duplicate delivery prevented.`,
           delivery: {
             success: true,
             status: 'Already Sent',
+            provider: existingSuccess.deliveryDetails?.provider,
             messageId: existingSuccess.deliveryDetails?.providerMessageId,
             maskedRecipient: existingSuccess.deliveryDetails?.maskedRecipientEmail || maskEmail(inquiry.customer.email),
+            recipient: inquiry.customer.email,
           },
         });
       }
     }
 
-    const emailRes = await sendInquiryStatusEmail({
-      customer: inquiry.customer,
-      inquiry,
-      previousStatus: null,
-      newStatus: inquiry.status,
-      notes: notes !== undefined ? notes : (inquiry.internalNotes || ''),
-    });
-
-    const emailDeliveryStatus = emailRes.success ? 'SENT' : 'FAILED';
-
-    const notifRecord = await prisma.notification.create({
-      data: {
+    // Find the latest failed (or any) email notification for this inquiry to retry
+    const existingNotif = await prisma.notification.findFirst({
+      where: {
         customerId: inquiry.customer.id,
-        title: `Email Retry: Inquiry ${inquiry.status}`,
-        message: emailRes.success
-          ? `Retry email accepted by provider for ${emailRes.maskedRecipient || inquiry.customer.email} (Inquiry #${inquiry.inquiryNumber}).`
-          : `Retry email delivery failed for ${emailRes.maskedRecipient || inquiry.customer.email}: ${emailRes.error}`,
-        type: 'inquiry_status_change',
         channel: 'EMAIL',
-        deliveryStatus: emailDeliveryStatus,
-        deliveryDetails: {
-          customerId: inquiry.customer.id,
-          inquiryId: inquiry.id,
-          inquiryNumber: inquiry.inquiryNumber,
-          recipientEmail: inquiry.customer.email,
-          maskedRecipientEmail: emailRes.maskedRecipient || maskEmail(inquiry.customer.email),
-          notificationType: 'inquiry_status_change_retry',
-          previousStatus: null,
-          newStatus: inquiry.status,
-          deliveryStatus: emailDeliveryStatus,
-          provider: emailRes.provider || 'Resend SMTP',
-          providerMessageId: emailRes.messageId || null,
-          errorMessage: emailRes.error || null,
-          isRetry: true,
-          attemptAt: new Date().toISOString(),
-        },
-        link: `/admin?tab=inquiries&id=${inquiry.id}`,
-        isRead: true,
+        OR: [
+          { deliveryDetails: { path: ['inquiryId'], equals: inquiry.id } },
+          { metadata: { path: ['inquiryId'], equals: inquiry.id } },
+        ],
       },
+      orderBy: { createdAt: 'desc' },
     });
 
-    await prisma.activityLog.create({
-      data: {
-        userId: req.user?.id,
-        action: 'INQUIRY_EMAIL_RETRY',
-        entityType: 'INQUIRY',
-        entityId: inquiry.id,
-        details: {
-          status: inquiry.status,
-          success: emailRes.success,
-          recipient: emailRes.maskedRecipient || maskEmail(inquiry.customer.email),
-          providerMessageId: emailRes.messageId || null,
-          error: emailRes.error || null,
-        },
-      },
-    });
+    let result;
+    if (existingNotif) {
+      result = await retryNotificationEmail(existingNotif.id);
+    } else {
+      result = await retryNotificationEmail(inquiry.id);
+    }
 
-    return res.json({
-      success: emailRes.success,
-      message: emailRes.success
-        ? `Customer email successfully accepted by provider for ${emailRes.maskedRecipient || maskEmail(inquiry.customer.email)}`
-        : `Email delivery failed: ${emailRes.error}`,
-      delivery: {
-        ...emailRes,
-        notificationId: notifRecord.id,
-      },
-    });
+    if (!result.success) {
+      return res.status(result.statusCode || 400).json(result);
+    }
+
+    return res.json(result);
   } catch (err) {
     next(err);
   }

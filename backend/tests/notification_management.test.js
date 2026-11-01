@@ -318,14 +318,18 @@ describe('Notification Management System & RBAC Authorization Audit', () => {
     });
     assert.ok(countAfter > countBefore, 'Inquiry submission must create an in-app notification in PostgreSQL');
 
-    // Clean up created inquiry & notifications
+    // Clean up created inquiry, notifications, & customer
     if (data.inquiryId) {
       await prisma.notification.deleteMany({
         where: { link: { contains: data.inquiryId } },
       });
+      const inq = await prisma.inquiry.findUnique({ where: { id: data.inquiryId } });
       await prisma.inquiry.deleteMany({
         where: { id: data.inquiryId },
       });
+      if (inq && inq.customerId) {
+        await prisma.customer.deleteMany({ where: { id: inq.customerId } });
+      }
     }
   });
 });
