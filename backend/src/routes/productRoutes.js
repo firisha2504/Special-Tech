@@ -10,7 +10,7 @@ import {
   deleteProduct,
   uploadProductImage,
 } from '../controllers/productController.js';
-import { authenticateToken, requireRole } from '../middleware/auth.js';
+import { authenticateToken, requireRole, requirePermission } from '../middleware/auth.js';
 import { upload } from '../middleware/upload.js';
 import { Role } from '@prisma/client';
 
@@ -22,7 +22,7 @@ router.get('/featured', getFeaturedProducts);
 router.get('/:slug', getProductBySlug);
 
 // Protected Admin Routes
-router.use(authenticateToken, requireRole([Role.ADMIN]));
+router.use(authenticateToken, requireRole([Role.ADMIN, Role.SUPER_ADMIN]), requirePermission('manage_services'));
 router.get('/admin/detail/:id', getProductById);
 router.post('/', createProduct);
 router.put('/:id', updateProduct);

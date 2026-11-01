@@ -13,6 +13,7 @@ async function main() {
     update: {
       name: 'Special Tech Administrator',
       role: Role.ADMIN,
+      isSuperAdmin: true,
       isActive: true,
     },
     create: {
@@ -20,12 +21,114 @@ async function main() {
       name: 'Special Tech Administrator',
       passwordHash,
       role: Role.ADMIN,
+      isSuperAdmin: true,
       avatar: null,
       isActive: true,
     },
   });
 
-  console.log(`✅ Super Admin configured: ${adminUser.email} (${adminUser.name})`);
+  console.log(`✅ Super Admin configured: ${adminUser.email} (${adminUser.name}, isSuperAdmin: true)`);
+
+  // 1.1 Granular System Permissions
+  const permissions = [
+    {
+      slug: 'manage_admins',
+      name: 'Manage Administrators & Permissions',
+      category: 'System & Security',
+      description: 'Create, update, deactivate, delete Admin accounts and assign granular permissions.',
+    },
+    {
+      slug: 'manage_customers',
+      name: 'Manage Customer Directory',
+      category: 'Customer & Proposals',
+      description: 'View customer accounts, company details, history, and internal notes.',
+    },
+    {
+      slug: 'manage_inquiries',
+      name: 'Manage Inquiries',
+      category: 'Customer & Proposals',
+      description: 'Review incoming customer project inquiries, assign to staff, and update status.',
+    },
+    {
+      slug: 'manage_requirements',
+      name: 'Manage AI Requirements',
+      category: 'Engineering & AI',
+      description: 'Review and manage AI-synthesized software requirement specifications.',
+    },
+    {
+      slug: 'manage_prototypes',
+      name: 'Manage Interactive Prototypes',
+      category: 'Engineering & AI',
+      description: 'Generate, inspect, and modify interactive UI prototypes.',
+    },
+    {
+      slug: 'manage_proposals',
+      name: 'Manage Proposals & Estimates',
+      category: 'Customer & Proposals',
+      description: 'Prepare, review, and export customer project proposals and PDF documents.',
+    },
+    {
+      slug: 'manage_projects',
+      name: 'Manage Portfolio Projects',
+      category: 'Portfolio & Website',
+      description: 'Create, edit, publish, and delete portfolio case studies and project details.',
+    },
+    {
+      slug: 'manage_services',
+      name: 'Manage Products & Services',
+      category: 'Portfolio & Website',
+      description: 'Manage SaaS products, pricing tiers, and customer demo requests.',
+    },
+    {
+      slug: 'manage_website_content',
+      name: 'Manage Website Content',
+      category: 'Portfolio & Website',
+      description: 'Update public team members, company overview, and marketing content.',
+    },
+    {
+      slug: 'view_analytics',
+      name: 'View Analytics & Reports',
+      category: 'System & Security',
+      description: 'Access business metrics, KPI summaries, and inquiry conversion analytics.',
+    },
+    {
+      slug: 'manage_ai_settings',
+      name: 'Configure AI Platform',
+      category: 'Engineering & AI',
+      description: 'Configure external AI providers (Gemini/OpenAI), test connectivity, and inspect sessions.',
+    },
+    {
+      slug: 'manage_system_settings',
+      name: 'Manage System & SMTP Settings',
+      category: 'System & Security',
+      description: 'Configure platform settings, email dispatch, and SMTP credentials.',
+    },
+    {
+      slug: 'view_audit_logs',
+      name: 'View Audit Logs',
+      category: 'System & Security',
+      description: 'Inspect administrative audit trails, security events, and IP logs.',
+    },
+    {
+      slug: 'manage_backups',
+      name: 'Manage Backups & Recovery',
+      category: 'System & Security',
+      description: 'Initiate database backups, export state snapshots, and manage disaster recovery.',
+    },
+  ];
+
+  for (const perm of permissions) {
+    await prisma.permission.upsert({
+      where: { slug: perm.slug },
+      update: {
+        name: perm.name,
+        category: perm.category,
+        description: perm.description,
+      },
+      create: perm,
+    });
+  }
+  console.log(`✅ Seeded ${permissions.length} granular system permissions`);
 
   // 2. Core Engineering Services
   const services = [

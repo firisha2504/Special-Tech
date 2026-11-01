@@ -8,6 +8,7 @@ datasource db {
 }
 
 enum Role {
+  SUPER_ADMIN
   ADMIN
   MANAGER
   DEVELOPER
@@ -36,20 +37,51 @@ enum MessageSender {
 }
 
 model User {
-  id           String        @id @default(uuid())
-  email        String        @unique
-  passwordHash String
-  name         String
-  role         Role          @default(ADMIN)
-  avatar       String?
-  isActive     Boolean       @default(true)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id              String           @id @default(uuid())
+  email           String           @unique
+  passwordHash    String
+  name            String
+  role            Role             @default(ADMIN)
+  isSuperAdmin    Boolean          @default(false)
+  avatar          String?
+  isActive        Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
-  assignedInquiries Inquiry[]     @relation("AssignedToUser")
+  assignedInquiries Inquiry[]      @relation("AssignedToUser")
   activityLogs      ActivityLog[]
+  userPermissions   UserPermission[]
 
   @@map("users")
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  name        String
+  category    String
+  description String?
+  createdAt   DateTime @default(now())
+
+  userPermissions UserPermission[]
+
+  @@map("permissions")
+}
+
+model UserPermission {
+  id           String     @id @default(uuid())
+  userId       String
+  permissionId String
+  grantedAt    DateTime   @default(now())
+  grantedBy    String?
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permissionId])
+  @@index([userId])
+  @@index([permissionId])
+  @@map("user_permissions")
 }
 
 model Customer {

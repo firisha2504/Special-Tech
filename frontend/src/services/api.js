@@ -101,6 +101,19 @@ export const adminApi = {
   getEmailStatus: () => api.get('/admin/email/status'),
   testSMTPConnection: () => api.post('/admin/email/test-connection'),
   sendTestEmail: (data) => api.post('/admin/email/send-test', data),
+  exportBackup: () => api.get('/admin/backups/export'),
+};
+
+export const rbacApi = {
+  getPermissions: () => api.get('/admin/permissions'),
+  getUsers: (params) => api.get('/admin/users', { params }),
+  getUserById: (id) => api.get(`/admin/users/${id}`),
+  createUser: (data) => api.post('/admin/users', data),
+  updateUser: (id, data) => api.put(`/admin/users/${id}`, data),
+  updateStatus: (id, data) => api.patch(`/admin/users/${id}/status`, data),
+  updatePermissions: (id, data) => api.put(`/admin/users/${id}/permissions`, data),
+  deleteUser: (id) => api.delete(`/admin/users/${id}`),
+  exportBackup: () => api.get('/admin/backups/export'),
 };
 
 export default api;

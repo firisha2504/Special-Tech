@@ -10,7 +10,7 @@ import {
   deleteProject,
   uploadProjectImage,
 } from '../controllers/projectController.js';
-import { authenticateToken, requireRole } from '../middleware/auth.js';
+import { authenticateToken, requireRole, requirePermission } from '../middleware/auth.js';
 import { upload } from '../middleware/upload.js';
 import { Role } from '@prisma/client';
 
@@ -22,7 +22,7 @@ router.get('/featured', getFeaturedProjects);
 router.get('/:slug', getProjectBySlug);
 
 // Protected Admin Routes
-router.use(authenticateToken, requireRole([Role.ADMIN]));
+router.use(authenticateToken, requireRole([Role.ADMIN, Role.SUPER_ADMIN]), requirePermission('manage_projects'));
 router.get('/admin/detail/:id', getProjectById);
 router.post('/', createProject);
 router.put('/:id', updateProject);

@@ -16,6 +16,7 @@ import {
   X,
   ExternalLink,
   Shield,
+  ShieldCheck,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -29,23 +30,29 @@ export const NAV_GROUPS = [
   {
     group: 'MANAGEMENT',
     items: [
-      { id: 'inquiries', name: 'Inquiries & Proposals', icon: Inbox, countKey: 'newInquiries' },
-      { id: 'projects', name: 'Portfolio Projects', icon: Briefcase },
-      { id: 'products', name: 'Products & Solutions', icon: Package, countKey: 'newDemoRequests' },
-      { id: 'customers', name: 'Customer Directory', icon: Users },
+      { id: 'inquiries', name: 'Inquiries & Proposals', icon: Inbox, countKey: 'newInquiries', permission: 'manage_inquiries' },
+      { id: 'projects', name: 'Portfolio Projects', icon: Briefcase, permission: 'manage_projects' },
+      { id: 'products', name: 'Products & Solutions', icon: Package, countKey: 'newDemoRequests', permission: 'manage_services' },
+      { id: 'customers', name: 'Customer Directory', icon: Users, permission: 'manage_customers' },
     ],
   },
   {
     group: 'AI PLATFORM',
     items: [
-      { id: 'ai', name: 'AI & Templates', icon: Cpu },
+      { id: 'ai', name: 'AI & Templates', icon: Cpu, permission: 'manage_ai_settings' },
+    ],
+  },
+  {
+    group: 'SECURITY & ACCESS',
+    items: [
+      { id: 'permissions', name: 'Permissions & Roles', icon: ShieldCheck, permission: 'manage_admins' },
     ],
   },
   {
     group: 'SYSTEM',
     items: [
-      { id: 'logs', name: 'Audit Logs', icon: History },
-      { id: 'settings', name: 'Settings', icon: Settings },
+      { id: 'logs', name: 'Audit Logs', icon: History, permission: 'view_audit_logs' },
+      { id: 'settings', name: 'Settings', icon: Settings, permission: 'manage_system_settings' },
     ],
   },
 ];
@@ -72,6 +79,21 @@ export const AdminSidebar = ({
     if (!countKey || !stats?.kpis) return 0;
     return stats.kpis[countKey] || 0;
   };
+
+  const filteredNavGroups = NAV_GROUPS.map((group) => {
+    const visibleItems = group.items.filter((item) => {
+      // Super Admin sees all navigation items
+      if (user?.isSuperAdmin || user?.role === 'SUPER_ADMIN') {
+        return true;
+      }
+      // Default items (like Overview) visible to all admins
+      if (!item.permission) {
+        return true;
+      }
+      return Array.isArray(user?.permissions) && user.permissions.includes(item.permission);
+    });
+    return { ...group, items: visibleItems };
+  }).filter((group) => group.items.length > 0);
 
   return (
     <>
@@ -137,7 +159,7 @@ export const AdminSidebar = ({
 
         {/* Navigation Groups List */}
         <div className="flex-1 overflow-y-auto px-3 py-4 space-y-6 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800">
-          {NAV_GROUPS.map((group, gIdx) => (
+          {filteredNavGroups.map((group, gIdx) => (
             <div key={group.group} className="space-y-1">
               {/* Group Title (Hidden when collapsed) */}
               {!isCollapsed ? (
@@ -196,8 +218,10 @@ export const AdminSidebar = ({
                     {user?.name || 'Administrator'}
                   </div>
                   <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono flex items-center gap-1">
-                    <Shield className="w-2.5 h-2.5 text-brand-blue dark:text-brand-cyan" />
-                    <span>Administrator</span>
+                    <Shield className={`w-2.5 h-2.5 ${user?.isSuperAdmin ? 'text-amber-400' : 'text-brand-blue dark:text-brand-cyan'}`} />
+                    <span className={user?.isSuperAdmin ? 'text-amber-500 font-semibold' : ''}>
+                      {user?.isSuperAdmin ? 'Super Admin' : 'Admin'}
+                    </span>
                   </div>
                 </div>
               )}

@@ -7,7 +7,20 @@ export const login = async (req, res, next) => {
   try {
     const { email, password } = loginSchema.parse(req.body);
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: {
+        userPermissions: {
+          select: {
+            permission: {
+              select: {
+                slug: true,
+              },
+            },
+          },
+        },
+      },
+    });
     if (!user || !user.isActive) {
       return res.status(401).json({ success: false, message: 'Invalid credentials or inactive account' });
     }
@@ -16,6 +29,26 @@ export const login = async (req, res, next) => {
     if (!isValidPassword) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
+
+    const isSuper = Boolean(user.isSuperAdmin || user.role === 'SUPER_ADMIN' || user.email === 'admin@specialtech.com');
+    const permissions = isSuper
+      ? [
+          'manage_admins',
+          'manage_customers',
+          'manage_inquiries',
+          'manage_requirements',
+          'manage_prototypes',
+          'manage_proposals',
+          'manage_projects',
+          'manage_services',
+          'manage_website_content',
+          'view_analytics',
+          'manage_ai_settings',
+          'manage_system_settings',
+          'view_audit_logs',
+          'manage_backups',
+        ]
+      : (user.userPermissions || []).map((up) => up.permission?.slug).filter(Boolean);
 
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
@@ -43,7 +76,9 @@ export const login = async (req, res, next) => {
         email: user.email,
         name: user.name,
         role: user.role,
+        isSuperAdmin: isSuper,
         avatar: user.avatar,
+        permissions,
       },
     });
   } catch (err) {

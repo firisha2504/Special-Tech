@@ -350,3 +350,56 @@ export const getAdminConversationById = async (req, res, next) => {
     next(err);
   }
 };
+
+export const exportDatabaseSnapshot = async (req, res, next) => {
+  try {
+    const [users, customers, inquiries, projects, products, settings, teamMembers] = await Promise.all([
+      prisma.user.findMany({ select: { id: true, email: true, name: true, role: true, isSuperAdmin: true, isActive: true, createdAt: true } }),
+      prisma.customer.findMany(),
+      prisma.inquiry.findMany(),
+      prisma.project.findMany(),
+      prisma.product.findMany(),
+      prisma.adminSetting.findMany(),
+      prisma.teamMember.findMany(),
+    ]);
+
+    const backupSnapshot = {
+      version: '1.0.0',
+      timestamp: new Date().toISOString(),
+      initiatedBy: req.user?.email,
+      summary: {
+        users: users.length,
+        customers: customers.length,
+        inquiries: inquiries.length,
+        projects: projects.length,
+        products: products.length,
+        settings: settings.length,
+        teamMembers: teamMembers.length,
+      },
+      data: {
+        users,
+        customers,
+        inquiries,
+        projects,
+        products,
+        settings,
+        teamMembers,
+      },
+    };
+
+    await prisma.activityLog.create({
+      data: {
+        userId: req.user?.id,
+        action: 'DATABASE_BACKUP_EXPORTED',
+        entityType: 'DATABASE',
+        entityId: `backup-${Date.now()}`,
+        details: backupSnapshot.summary,
+        ipAddress: req.ip || req.headers['x-forwarded-for'],
+      },
+    });
+
+    res.json({ success: true, backup: backupSnapshot });
+  } catch (err) {
+    next(err);
+  }
+};

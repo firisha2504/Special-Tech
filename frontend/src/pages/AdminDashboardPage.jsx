@@ -33,21 +33,24 @@ import {
   Mail,
   Send,
   Server,
+  ShieldCheck,
 } from 'lucide-react';
 import Logo from '../components/common/Logo';
 import AdminLayout from '../layouts/AdminLayout';
 import AdminProjectManager from '../features/admin/AdminProjectManager';
 import AdminProductManager from '../features/admin/AdminProductManager';
+import AdminPermissionManager from '../features/admin/AdminPermissionManager';
 
 const ADMIN_TABS = [
   { id: 'overview', name: 'Overview', icon: LayoutDashboard },
-  { id: 'inquiries', name: 'Inquiries & Proposals', icon: Inbox, countKey: 'newInquiries' },
-  { id: 'projects', name: 'Portfolio Projects', icon: Briefcase },
-  { id: 'products', name: 'Products & Solutions', icon: Package, countKey: 'newDemoRequests' },
-  { id: 'customers', name: 'Customer Directory', icon: Users },
-  { id: 'ai', name: 'AI & Templates', icon: Cpu },
-  { id: 'settings', name: 'Settings', icon: Settings },
-  { id: 'logs', name: 'Audit Logs', icon: History },
+  { id: 'inquiries', name: 'Inquiries & Proposals', icon: Inbox, countKey: 'newInquiries', permission: 'manage_inquiries' },
+  { id: 'projects', name: 'Portfolio Projects', icon: Briefcase, permission: 'manage_projects' },
+  { id: 'products', name: 'Products & Solutions', icon: Package, countKey: 'newDemoRequests', permission: 'manage_services' },
+  { id: 'customers', name: 'Customer Directory', icon: Users, permission: 'manage_customers' },
+  { id: 'ai', name: 'AI & Templates', icon: Cpu, permission: 'manage_ai_settings' },
+  { id: 'permissions', name: 'Permissions & Roles', icon: ShieldCheck, permission: 'manage_admins' },
+  { id: 'settings', name: 'Settings', icon: Settings, permission: 'manage_system_settings' },
+  { id: 'logs', name: 'Audit Logs', icon: History, permission: 'view_audit_logs' },
 ];
 
 export const AdminDashboardPage = () => {
@@ -61,7 +64,7 @@ export const AdminDashboardPage = () => {
   const [loggingIn, setLoggingIn] = useState(false);
 
   // Active admin tab with URL search parameter persistence
-  const validTabIds = ['overview', 'inquiries', 'projects', 'products', 'customers', 'ai', 'settings', 'logs'];
+  const validTabIds = ['overview', 'inquiries', 'projects', 'products', 'customers', 'ai', 'permissions', 'settings', 'logs'];
   const urlTab = searchParams.get('tab');
   const initialTab = validTabIds.includes(urlTab) ? urlTab : 'overview';
   const [activeTab, setActiveTabState] = useState(initialTab);
@@ -78,6 +81,19 @@ export const AdminDashboardPage = () => {
       setActiveTabState(tabFromUrl);
     }
   }, [searchParams]);
+
+  // Verify permissions for current active tab and redirect if unauthorized
+  useEffect(() => {
+    if (!user || user.isSuperAdmin || user.role === 'SUPER_ADMIN') return;
+
+    const currentTabDef = ADMIN_TABS.find((t) => t.id === activeTab);
+    if (currentTabDef?.permission && (!Array.isArray(user.permissions) || !user.permissions.includes(currentTabDef.permission))) {
+      const firstAllowedTab = ADMIN_TABS.find((t) => !t.permission || user.permissions?.includes(t.permission))?.id || 'overview';
+      if (firstAllowedTab !== activeTab) {
+        setActiveTab(firstAllowedTab);
+      }
+    }
+  }, [activeTab, user]);
 
   // Data states
   const [stats, setStats] = useState(null);
@@ -935,6 +951,19 @@ export const AdminDashboardPage = () => {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* TAB: PERMISSIONS & ROLE-BASED ACCESS CONTROL */}
+      {activeTab === 'permissions' && (
+        <div
+          role="tabpanel"
+          id="admin-panel-permissions"
+          aria-labelledby="admin-tab-permissions"
+          tabIndex={0}
+          className="focus-visible:outline-none"
+        >
+          <AdminPermissionManager />
         </div>
       )}
 
