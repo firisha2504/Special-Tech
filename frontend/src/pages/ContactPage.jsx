@@ -89,8 +89,8 @@ export const ContactPage = () => {
                 </div>
                 <div>
                   <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">Email Inquiries</div>
-                  <a href="mailto:contact@specialtech.com" className="text-slate-900 dark:text-white font-semibold hover:text-brand-blue dark:hover:text-brand-cyan transition-colors">
-                    contact@specialtech.com
+                  <a href="mailto:nanishaabdi2504@gmail.com" className="text-slate-900 dark:text-white font-semibold hover:text-brand-blue dark:hover:text-brand-cyan transition-colors">
+                   nanishaabdi2504@gmail.com
                   </a>
                 </div>
               </div>
@@ -101,8 +101,8 @@ export const ContactPage = () => {
                 </div>
                 <div>
                   <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">Direct Telephone & WhatsApp</div>
-                  <a href="tel:+15553827000" className="text-slate-900 dark:text-white font-semibold hover:text-brand-blue dark:hover:text-brand-cyan transition-colors">
-                    +1 (555) 382-7000
+                  <a href="tel:+251925045213" className="text-slate-900 dark:text-white font-semibold hover:text-brand-blue dark:hover:text-brand-cyan transition-colors">
+                   +251925045213
                   </a>
                 </div>
               </div>
@@ -112,10 +112,10 @@ export const ContactPage = () => {
                   <MapPin className="w-5 h-5" />
                 </div>
                 <div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">Headquarters</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">Ethiopia</div>
                   <div className="text-slate-900 dark:text-white font-semibold leading-relaxed">
-                    Silicon Horizon Tech Park<br />
-                    400 Innovation Way, Suite 800
+                    Dire Dawa<br />
+                     Melka Jebdu
                   </div>
                 </div>
               </div>
